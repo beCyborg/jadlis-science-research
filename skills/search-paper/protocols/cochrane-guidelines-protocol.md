@@ -26,7 +26,7 @@ Cochrane CDSR полностью индексируется в PubMed (journal "
 ### Cochrane Library + UpToDate (combined via Goggles)
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN} systematic review guidelines",
   count: 8,
   goggles: "$discard\n$site=cochranelibrary.com\n$site=uptodate.com"
@@ -36,7 +36,7 @@ mcp__brave-search__brave_web_search({
 ### NICE Guidelines
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN} guidelines recommendation",
   count: 5,
   goggles: "$discard\n$site=nice.org.uk"
@@ -46,7 +46,7 @@ mcp__brave-search__brave_web_search({
 ### WHO / Major Guidelines
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN} clinical guideline recommendation",
   count: 5,
   goggles: "$discard\n$site=who.int\n$site=cdc.gov"

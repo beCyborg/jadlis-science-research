@@ -64,7 +64,7 @@ done
 
 Для каждой из top-10 статей:
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "site:pubpeer.com \"{first 8 words of paper title}\"",
   count: 3
 })
@@ -111,7 +111,7 @@ curl -s "https://api.semanticscholar.org/graph/v1/paper/${S2_PAPER_ID}/citations
 ### Шаг 6. Consensus / scite sanity — Brave (max 3 SEQUENTIAL вызова)
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{MAIN_CONCLUSION}",
   count: 5,
   goggles: "$discard\n$site=consensus.app\n$site=scite.ai"

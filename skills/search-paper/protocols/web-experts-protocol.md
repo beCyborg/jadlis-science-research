@@ -17,7 +17,7 @@
 ### Evidence-based expert sources
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN}",
   count: 10,
   extra_snippets: true,
@@ -30,7 +30,7 @@ mcp__brave-search__brave_web_search({
 ### Domain-specific experts (для biomedical)
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN} evidence review",
   count: 5,
   goggles: "$discard\n$site=science.org\n$site=nytimes.com\n$site=medicalnewstoday.com"
@@ -40,7 +40,7 @@ mcp__brave-search__brave_web_search({
 ### Domain-specific experts (для cs/physics)
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN} research analysis",
   count: 5,
   goggles: "$discard\n$site=distill.pub\n$site=lilianweng.github.io\n$site=paperswithcode.com"

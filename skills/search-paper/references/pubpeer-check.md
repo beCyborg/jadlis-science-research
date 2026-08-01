@@ -16,7 +16,7 @@ PubPeer (pubpeer.com) — платформа post-publication peer review. На�
 ### Шаг 1: Поиск через Brave
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: 'site:pubpeer.com "{first 8 words of paper title}"',
   count: 3
 })
