@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "jadlis-research",
+  "displayName": "Jadlis — ресерч-стек",
+  "description": "Батч 4: search, full-research, search-paper, verif плюс пять MCP-серверов и скилл настройки ключей.",
+  "author": { "name": "Be Cyborg" },
+  "homepage": "https://github.com/beCyborg/jadlis",
+  "repository": "https://github.com/beCyborg/jadlis",
+  "license": "MIT",
+  "keywords": ["jadlis", "research", "search", "verification", "science"],
+  "defaultEnabled": false,
+  "userConfig": {
+    "VAULT_PATH": {
+      "type": "directory",
+      "title": "Папка vault",
+      "description": "Корень Obsidian-vault системы Jadlis. Туда лягут отчёты (Знания/Ресерчи/) и вердикты (AI/verif/).",
+      "default": "~/Jadlis",
+      "required": false
+    },
+    "BRAVE_API_KEY": {
+      "type": "string",
+      "title": "Brave Search API Key",
+      "description": "Тариф Search. Завести: api-dashboard.search.brave.com",
+      "sensitive": true,
+      "required": true
+    },
+    "FIRECRAWL_API_KEY": {
+      "type": "string",
+      "title": "Firecrawl API Key",
+      "description": "Формат fc-… Завести: firecrawl.dev/app/api-keys",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}
