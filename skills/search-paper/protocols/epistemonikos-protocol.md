@@ -19,7 +19,7 @@ Epistemonikos (epistemonikos.org) — крупнейшая курируемая 
 
 ## Primary: scrape результатов поиска (firecrawl)
 
-У Epistemonikos нет стабильного открытого REST API для агентов — используем scrape страницы поиска. Загрузи firecrawl через ToolSearch (`select:mcp__firecrawl__firecrawl_scrape`).
+У Epistemonikos нет стабильного открытого REST API для агентов — используем scrape страницы поиска. Загрузи firecrawl через ToolSearch (`select:mcp__plugin_jadlis-research_firecrawl__firecrawl_scrape`).
 
 ### Поиск
 
@@ -29,7 +29,7 @@ https://www.epistemonikos.org/en/search?q={REFINED_QUERY_EN_URLENCODED}&classifi
 ```
 
 ```
-mcp__firecrawl__firecrawl_scrape({
+mcp__plugin_jadlis-research_firecrawl__firecrawl_scrape({
   url: "https://www.epistemonikos.org/en/search?q={REFINED_QUERY_EN_URLENCODED}&classification=systematic-review",
   formats: ["markdown"],
   onlyMainContent: true,
@@ -54,10 +54,10 @@ mcp__firecrawl__firecrawl_scrape({
 ## Fallback: Brave с site-filter
 
 Если firecrawl недоступен или 0 карточек:
-1. Загрузи brave (`select:mcp__brave-search__brave_web_search`).
+1. Загрузи brave (`select:mcp__plugin_jadlis-research_brave-search__brave_web_search`).
 2. Один вызов:
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN} systematic review",
   count: 8,
   goggles: "$discard\n$site=epistemonikos.org"

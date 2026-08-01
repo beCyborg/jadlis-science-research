@@ -32,9 +32,9 @@ Consensus не публикует стабильный открытый REST д�
 
 ## Fallback: scrape (firecrawl)
 
-Если API недоступен — scrape публичной страницы результата. Загрузи firecrawl (`select:mcp__firecrawl__firecrawl_scrape`):
+Если API недоступен — scrape публичной страницы результата. Загрузи firecrawl (`select:mcp__plugin_jadlis-research_firecrawl__firecrawl_scrape`):
 ```
-mcp__firecrawl__firecrawl_scrape({
+mcp__plugin_jadlis-research_firecrawl__firecrawl_scrape({
   url: "https://consensus.app/search/?q={YES_NO_QUESTION_URLENCODED}",
   formats: ["markdown"],
   onlyMainContent: true,

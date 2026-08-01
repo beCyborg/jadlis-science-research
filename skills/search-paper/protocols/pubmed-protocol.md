@@ -56,7 +56,7 @@ curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=
 2. Если повторный fail → **LIMITED Brave fallback** (max 1 call):
 
 ```
-mcp__brave-search__brave_web_search({
+mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{REFINED_QUERY_EN}",
   count: 10,
   goggles: "$discard\n$site=pubmed.ncbi.nlm.nih.gov"

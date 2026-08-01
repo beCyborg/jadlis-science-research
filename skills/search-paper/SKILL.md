@@ -18,8 +18,8 @@ allowed-tools:
   - Bash
   - AskUserQuestion
   - Workflow
-  - mcp__brave-search__brave_web_search
-  - mcp__firecrawl__firecrawl_scrape
+  - mcp__plugin_jadlis-research_brave-search__brave_web_search
+  - mcp__plugin_jadlis-research_firecrawl__firecrawl_scrape
 argument-hint: "<query — научный вопрос на русском или английском>"
 model: claude-opus-5
 effort: xhigh
