@@ -8,11 +8,13 @@
 
 Перед записью нового файла в vault выполни через Bash:
 
-```bash
-# 1. Проверка дубликатов по ключевым словам темы
-DUPES=$(obsidian search query="{КЛЮЧЕВЫЕ_СЛОВА}" path="{TARGET_PATH}" limit=5 format=json 2>/dev/null) || DUPES="CLI_UNAVAILABLE"
+Порядок: (1) MCP `qmd` `query` payload'ом (lex+vec, `collections:["znaniya"]`, см. `Jadlis/CLAUDE.md` «Поиск по смыслу») → (2) детерминированный grep → (3) `obsidian search` только как fallback (флаки, 2–3×).
 
-# 2. Поиск связанных заметок для wikilinks
+```bash
+# 1. Проверка дубликатов по ключевым словам темы (детерминированно; grep в обход обёртки)
+DUPES=$(command grep -rIl "{КЛЮЧЕВЫЕ_СЛОВА}" "{TARGET_PATH}" 2>/dev/null)
+
+# 2. Поиск связанных заметок для wikilinks (fallback — obsidian search, гонять 2–3×)
 RELATED=$(obsidian search query="{КЛЮЧЕВОЕ_СЛОВО}" limit=10 format=json 2>/dev/null) || RELATED="CLI_UNAVAILABLE"
 ```
 
@@ -25,7 +27,7 @@ RELATED=$(obsidian search query="{КЛЮЧЕВОЕ_СЛОВО}" limit=10 format=
 
 ### Правила wikilinks
 
-- Wikilinks `[[Название]]` — ТОЛЬКО для заметок, найденных через `obsidian search` (реально существующих в vault)
+- Wikilinks `[[Название]]` — ТОЛЬКО для заметок, найденных через qmd/grep/`obsidian search` (реально существующих в vault; точная проверка — `test -e` / `obsidian read path=...`)
 - НЕ создавай wikilinks на несуществующие заметки (создают "unresolved" в графе)
 - НЕ используй wikilinks в frontmatter tags
 - Wikilinks допустимы в body: секции "Связанные заметки", inline-ссылки на найденные заметки
@@ -74,8 +76,10 @@ Embed конкретной секции (`![[Файл#Секция]]`) — то�
 После записи файла в vault:
 
 ```bash
-# 1. Прокинуть в дневную заметку (если Obsidian запущен)
-obsidian append path="Периоды/День/$(date +%F).md" content="- [[{NOTE_NAME}]] — {DRAFT_TYPE}, ожидает ревью" 2>/dev/null || true
+# 1. Прокинуть в дневную заметку (если Obsidian запущен); путь — из core Daily notes
+DAILY=$(obsidian daily:path 2>/dev/null) || DAILY="Периоды/День/$(date +%F).md"
+obsidian append path="$DAILY" content="- [[{NOTE_NAME}]] — {DRAFT_TYPE}, ожидает ревью" 2>/dev/null || true
+# в начало тела (после frontmatter) — obsidian prepend path="$DAILY" content="..." 
 
 # 2. Проверить orphan status (информационно)
 BACKLINKS=$(obsidian backlinks file="{NOTE_NAME}" counts 2>/dev/null) || BACKLINKS="CLI_UNAVAILABLE"
@@ -100,9 +104,10 @@ BACKLINKS=$(obsidian backlinks file="{NOTE_NAME}" counts 2>/dev/null) || BACKLIN
 
 ---
 
-## 6. Ловушки CLI (проверено 2026-07)
+## 6. Ловушки CLI (проверено 2026-07, дополнено 2026-08-25)
 
-- **`obsidian daily:append` не существует** — только `obsidian append path="Периоды/День/$(date +%F).md"`; у `append` есть только параметры `file/path/content/inline`.
+- **`daily:path/read/append/prepend` доступны только при включённом core Daily notes** (включён 25.08; выключен → «Daily notes plugin is not enabled»). `daily:path` отдаёт путь до создания файла. У `append` параметры `file/path/content/inline`.
+- **`obsidian create --help` не печатает справку, а создаёт заметку `Untitled.md`** — справку смотреть в скилле `obsidian-cli`.
 - **`append` не создаёт файл** и возвращает **exit 0** при «File not found» → `|| true` глотает провал молча. Если запись важна — сначала проверить наличие файла, скелет дневной заметки создавать `Write`.
 - **`obsidian search` флаки** (читает живую панель поиска асинхронно): один и тот же запрос даёт `0 / 148 / 0`. Гонять 2–3 раза, брать непустой результат. Для точной проверки существования — `obsidian read path="..."`.
 - **Дневная заметка структурирована** (раздел «Хронология» в середине) → `append` пишет только в конец файла; записи в хронологию вносить через `Edit`.

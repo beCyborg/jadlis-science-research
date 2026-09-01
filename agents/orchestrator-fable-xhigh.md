@@ -1,7 +1,7 @@
 ---
 name: orchestrator-fable-xhigh
 description: Оркестратор-воркер для workflow full-research-core — роль curator (отбор ключевых claims; всегда Opus 5) и fallback analyst при fableBridge:false. Не вызывать вручную — промпт целиком приходит от оркестратора.
-model: opus
+model: claude-opus-5
 effort: xhigh
 ---
 

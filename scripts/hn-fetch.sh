@@ -166,6 +166,7 @@ canary)
   age=$(( $(date +%s) - ${latest%% *} ))
   echo "algolia_ok latest_story_age=${age}s title=${latest#* }"
   [ "$age" -gt 3600 ] && { echo "HN_INDEX_STALE (>1ч)" >&2; exit 5; }
+  exit 0
   ;;
 
 *) echo "unknown subcommand: $cmd (search|thread|user|front|canary)" >&2; exit 1;;
