@@ -25,8 +25,6 @@ mcp__plugin_jadlis-research_brave-search__brave_web_search({
 })
 ```
 
-> **scite.ai и consensus.app вынесены в опциональные trust-модули** (`protocols/scite-module.md`, `protocols/consensus-module.md`) — они дают структурированные supporting/contrasting-сигналы и Consensus Meter по API/scrape, а не ловятся web-поиском. Подключаются автоматически при наличии `SCITE_API_KEY` / `CONSENSUS_API_KEY`. Здесь, в web-experts, их site-фильтры больше не используются.
-
 ### Domain-specific experts (для biomedical)
 
 ```
@@ -69,8 +67,6 @@ mcp__plugin_jadlis-research_brave-search__brave_web_search({
 | sciencebasedmedicine.org | Skeptical medical analysis | Expert blog | biomedical |
 | statnews.com | Health/pharma journalism | News | biomedical |
 | astralcodexten.com | Deep analytical essays, meta-science | Expert blog | general |
-| scite.ai | Smart citations (supporting/contrasting) | AI tool | all |
-| consensus.app | AI-aggregated research consensus | AI tool | all |
 | science.org | Science/Nature journalism | Expert review | biomedical |
 | distill.pub | ML/AI explainers | Expert review | cs |
 | paperswithcode.com | SOTA benchmarks, reproducibility | Database | cs |
@@ -97,21 +93,12 @@ mcp__plugin_jadlis-research_brave-search__brave_web_search({
 ## Источники
 ### [w1] {Source domain} — {Title}
 **URL:** ...
-**Type:** expert review / AI aggregation / news
+**Type:** expert review / news
 **Key claims:**
 - {claim 1}
 - {claim 2}
 **Referenced papers:** {DOI if mentioned}
 **Stance:** supports / contradicts / nuances mainstream view
-
-## AI Aggregation (если доступно)
-### consensus.app
-- Consensus: {agree/disagree/mixed}
-- % studies supporting: ...
-
-### scite.ai
-- Supporting citations: N
-- Contrasting citations: M
 
 ## Мета
 - Источников найдено: N

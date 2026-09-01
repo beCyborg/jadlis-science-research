@@ -176,7 +176,7 @@ GRADE (Grading of Recommendations, Assessment, Development and Evaluation) оц�
 | Red Flag | Источник данных | Severity |
 |----------|---------------|----------|
 | **Industry funding** | Crossref `funder` field | WARNING (не автоматический disqualify) |
-| **Retracted** | Crossref `update-to.type == "retraction"` | CRITICAL — исключить из evidence |
+| **Retracted** (три сигнала, достаточно одного) | Crossref: (a) `updated-by[].type == "retraction"` — основной сигнал отозванной статьи (дата отзыва = его `updated.date-parts`); (b) title начинается с `RETRACTED`/`Retracted:`/`WITHDRAWN`; (c) `update-to[].type == "retraction"` — сам DOI является уведомлением об отзыве | CRITICAL — исключить из evidence |
 | **Predatory journal** | Beall's list (beallslist.net) + Cabells | CRITICAL — исключить из evidence |
 | **Small N** | Paper metadata | WARNING если N < 100 для RCT; контекстно для rare diseases |
 | **Single-center** | Paper metadata / fulltext | WARNING |

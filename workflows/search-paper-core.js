@@ -3,7 +3,7 @@ export const meta = {
   description: 'Ядро search-paper: query-builder → fan-out по научным источникам → citation snowballing → Crossref/Unpaywall enrich (retraction + anti-hallucination) → GRADE-синтез → adversarial critic → fix. Vault-контракт — в скилле.',
   phases: [
     { title: 'Query', detail: 'PICO/PECO → блоки синонимов → готовые строки запросов per-source' },
-    { title: 'Fan-out', detail: 'до 11 источников параллельно (PubMed/Europe PMC/S2/OpenAlex/arXiv/Cochrane/web-experts/Epistemonikos/ClinicalTrials + опц. scite/consensus)' },
+    { title: 'Fan-out', detail: 'до 9 источников параллельно (PubMed/Europe PMC/S2/OpenAlex/arXiv/Cochrane/web-experts/Epistemonikos/ClinicalTrials)' },
     { title: 'Snowball', detail: 'dedup → ≤6 hubs → forward/backward citation chasing до насыщения (≤2 итераций, cap 120)' },
     { title: 'Enrich', detail: 'батчи DOI: Crossref retraction+titleMatch+funder, Unpaywall OA, fulltext top-OA' },
     { title: 'Synthesize', detail: 'GRADE per-outcome → decision-first draft в workDir' },
@@ -25,7 +25,6 @@ const GUIDELINES = A.guidelines !== false                          // включ
 const LANG = A.lang === 'en' ? 'en' : 'ru'
 const PERSONALIZE = !!A.personalize
 const PROFILE_CONTEXT = PERSONALIZE && A.profileContext ? A.profileContext : null
-const MODULES = A.modules || {}                                    // {scite:bool, consensus:bool} — env-детект делает скилл
 const AI_MODEL = A.aiModel || 'unknown'
 const DATE = A.date || 'DRYRUN-DATE'
 const WORK_DIR = A.workDir || '.search-paper/dryrun'
@@ -36,6 +35,47 @@ const VAULT_PATH = A.vaultPath || ''
 // Воркер: пиннинг Opus 5 + effort xhigh через субагента researcher-opus-xhigh (как в full-research-core).
 const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-research:researcher-opus-xhigh' }
 const w = extra => Object.assign({}, WORKER_OPTS, extra)
+
+// Синтез (synth) — единственная роль с реальным Fable-преимуществом (сборка отчёта
+// из большого контекста). CLAUDE_CODE_SUBAGENT_MODEL ремапит субагентов в Opus 5,
+// поэтому Fable достаётся только отдельным headless-процессом `claude -p --model
+// claude-fable-5-1`. Дефолт — мост; отключение: args.fableBridge=false.
+const FABLE_BRIDGE = A.fableBridge !== false
+
+function bridgePrompt(role, rolePrompt, allowedTools, fieldsHint, schemaObj) {
+  const pf = `${WORK_DIR}/_fable-${role}-prompt.md`
+  const of = `${WORK_DIR}/_fable-${role}-out.json`
+  const sf = `${WORK_DIR}/_fable-${role}-schema.json`
+  // Производная схема для --json-schema: без корневых $schema/$id/title/description
+  // и числовых/строковых констрейнтов (иначе structured_output тихо отключается).
+  // enum НЕ снимаем (SYNTH держит evidenceStrengthMax/gradeMax на enum) — по плану
+  // это помечено «проверить на смоуке»: если structured_output отвалится, снимать enum здесь же.
+  const derived = JSON.parse(JSON.stringify(schemaObj), (k, v) =>
+    (k === 'minLength' || k === 'minimum' || k === 'maximum') ? undefined : v)
+  delete derived.$schema; delete derived.$id; delete derived.title; delete derived.description
+  return `Ты — технический МОСТ к модели Fable 5. Сам ролевую работу НЕ делай (кроме шага «Деградация»). Ровно четыре шага:
+
+1. Через Write запиши в файл ${pf} ДОСЛОВНО весь текст между маркерами <<<ROLE_PROMPT и ROLE_PROMPT>>> (маркеры не включать, текст не менять и не сокращать).
+
+2. Через Write запиши в файл ${sf} ДОСЛОВНО JSON между маркерами <<<SCHEMA и SCHEMA>>>.
+
+3. ОДИН Bash-вызов (параметр timeout: 600000; --settings глушит хуки, < /dev/null обязателен):
+cat "${pf}" | claude -p --model claude-fable-5-1 --effort high --allowedTools "${allowedTools}" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --settings '{"disableAllHooks":true}' --json-schema "$(cat "${sf}")" --output-format json > "${of}" 2>"${WORK_DIR}/_fable-${role}.err" < /dev/null; echo "EXIT=$?"
+
+4. Прочитай ${of} (Read): возьми поле .structured_output — это готовый объект с полями ${fieldsHint}; верни его по своей схеме БЕЗ изменений. Если ключа .structured_output нет — возьми JSON-блок в конце .result.
+
+Деградация: EXIT≠0 или ни .structured_output, ни валидного JSON в .result → один повтор шага 3; если снова сбой — выполни ролевой промпт из ${pf} САМОСТОЯТЕЛЬНО и верни результат по схеме (пометь в первом текстовом поле "[bridge-fallback: opus]"; если ролевой промпт писал файл отчёта с frontmatter — замени в нём ai_model на "claude-opus-5").
+
+<<<SCHEMA
+${JSON.stringify(derived)}
+SCHEMA>>>
+
+<<<ROLE_PROMPT
+${rolePrompt}
+ROLE_PROMPT>>>`
+}
+// Хвост ролевого промпта для headless-исполнения (нет StructuredOutput — финал печатается JSON-блоком)
+const bridgeTail = fieldsHint => `\n\nФИНАЛЬНЫЙ ВЫВОД (ты работаешь в headless-режиме): закончи ответ РОВНО ОДНИМ JSON-объектом с полями ${fieldsHint} внутри блока \`\`\`json ... \`\`\` — и никакого текста после блока.`
 
 // ── Константы always-deep (saturation/cap/budget гейты вместо tiered-режима) ──
 const MIN_SOURCES = 2          // <2 источников → insufficient-sources, скилл не пишет в vault
@@ -51,7 +91,7 @@ const FULLTEXT_BUDGET_FLOOR = 50_000   // не тянуть fulltext, если �
 const SKILL_DIR = `${PLUGIN_ROOT}/skills/search-paper`
 const PROTO = id => `${SKILL_DIR}/protocols/${id}`
 
-// ── Реестр источников: 9 бесплатных + 2 опц. модуля ──
+// ── Реестр источников: 9 бесплатных ──
 const ALL_SOURCES = {
   pubmed:        { source: 'PubMed',          prefix: 'pm', protocol: PROTO('pubmed-protocol.md'),               file: 'pubmed.md',        kind: 'biomed' },
   europepmc:     { source: 'Europe PMC',      prefix: 'em', protocol: PROTO('europe-pmc-protocol.md'),           file: 'europe-pmc.md',    kind: 'biomed' },
@@ -62,8 +102,6 @@ const ALL_SOURCES = {
   webExperts:    { source: 'Web Experts',     prefix: 'w',  protocol: PROTO('web-experts-protocol.md'),          file: 'web-experts.md',   kind: 'expert' },
   epistemonikos: { source: 'Epistemonikos',   prefix: 'ep', protocol: PROTO('epistemonikos-protocol.md'),        file: 'epistemonikos.md', kind: 'guideline' },
   clinicaltrials:{ source: 'ClinicalTrials.gov', prefix: 'ct', protocol: PROTO('clinicaltrials-protocol.md'),    file: 'clinicaltrials.md', kind: 'trials' },
-  scite:         { source: 'scite.ai',        prefix: 'sc', protocol: PROTO('scite-module.md'),                  file: 'scite.md',         kind: 'module' },
-  consensus:     { source: 'Consensus',       prefix: 'cn', protocol: PROTO('consensus-module.md'),              file: 'consensus.md',     kind: 'module' },
 }
 
 // Базовый набор: 9 бесплатных. arXiv/cochrane/epistemonikos снимаются по дисциплине.
@@ -81,8 +119,6 @@ function defaultSources() {
 let SELECTED = (Array.isArray(A.sources) && A.sources.length)
   ? A.sources.filter(s => ALL_SOURCES[s])
   : defaultSources()
-if (MODULES.scite) SELECTED.push('scite')
-if (MODULES.consensus) SELECTED.push('consensus')
 SELECTED = [...new Set(SELECTED)]
 
 const TOOL_NOTE = 'ВАЖНО: НЕ используй встроенные WebSearch/WebFetch (забанены). Нужные MCP-инструменты (brave/firecrawl) загружай через ToolSearch перед вызовом. Brave (тариф Search): 50 req/s — параллельные вызовы OK. НЕ спавни вложенных субагентов, НЕ вызывай skills.'
@@ -127,10 +163,8 @@ const SEARCH_PLAN = {
         webExperts: { type: ['string', 'null'] },
         epistemonikos: { type: ['string', 'null'] },
         clinicaltrials: { type: ['string', 'null'] },
-        scite: { type: ['string', 'null'] },
-        consensus: { type: ['string', 'null'] },
       },
-      required: ['pubmed', 'europepmc', 's2', 'openalex', 'arxiv', 'cochrane', 'webExperts', 'epistemonikos', 'clinicaltrials', 'scite', 'consensus'],
+      required: ['pubmed', 'europepmc', 's2', 'openalex', 'arxiv', 'cochrane', 'webExperts', 'epistemonikos', 'clinicaltrials'],
     },
     skip: { type: 'array', items: { type: 'string' }, description: 'ключи источников, которые осмысленно пропустить для этого запроса' },
     notes: { type: 'string', description: 'кратко: логика фрейминга и расширения' },
@@ -229,15 +263,25 @@ const ENRICH_BATCH_SCHEMA = {
   },
   required: ['batchIndex', 'items', 'fileWritten'],
 }
+const NUMBER_VERBATIM = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    field: { type: 'string', description: 'что за число: sampleN / effect size / CI / p / доза / длительность' },
+    value: { type: 'string', description: 'само число со всеми единицами, как в статье' },
+    quote: { type: 'string', description: 'дословный фрагмент-locator на языке оригинала, ≤300 символов, БЕЗ перевода' },
+  },
+  required: ['field', 'value', 'quote'],
+}
 const FULLTEXT_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
     doi: { type: 'string' },
     extracted: { type: 'boolean' },
     summary: { type: 'string', description: 'methods/N/inclusion/results/limitations/COI/RoB-signals, ≤1K токенов' },
+    numbersVerbatim: { type: 'array', items: NUMBER_VERBATIM, description: 'locator-ы для чисел; чисел нет или fulltext недоступен → пустой массив' },
     fileWritten: { type: ['string', 'null'] },
   },
-  required: ['doi', 'extracted', 'summary', 'fileWritten'],
+  required: ['doi', 'extracted', 'summary', 'numbersVerbatim', 'fileWritten'],
 }
 
 const SYNTH = {
@@ -333,7 +377,6 @@ ${DECISION ? `РЕШЕНИЕ ПОЛЬЗОВАТЕЛЯ: ${DECISION}` : ''}
    - s2 — relevance/semantic строка (без скобок-MeSH).
    - openalex / europepmc / arxiv / cochrane / epistemonikos / clinicaltrials — нативный синтаксис каждого (прочитай соответствующий protocol при сомнении).
    - webExperts — короткая тема EN.
-   - scite / consensus — только если в выбранных.
 4. skip[]: какие источники бессмысленны для запроса (напр. arXiv для чисто клинического вопроса; clinicaltrials для не-интервенционного).
 5. Материализуй методологию в данные, агент-источник не должен ничего достраивать.
 
@@ -412,7 +455,12 @@ ${seenKeys.slice(0, 400).map(k => `  ${k}`).join('\n')}
 
 ${TOOL_NOTE}
 ${NO_HALLUCINATION}
-Используй list-запросы (не singleton в цикле), per_page вверх. HTTP 429 → graceful skip (без Brave-fallback).
+Используй list-запросы (не singleton в цикле), per_page вверх. Brave-fallback НЕ используем.
+
+ПРИ HTTP 429:${hub.api === 'openalex' ? `
+1. OpenAlex ответил 429 → повтори ТОТ ЖЕ hub через Semantic Scholar: прочитай ${PROTO('s2-protocol.md')}, используй /citations и /references (batch-endpoint). Ключ: \`\${SEMANTIC_SCHOLAR_API_KEY}\` — проверь через Bash \`[ -n "\${SEMANTIC_SCHOLAR_API_KEY:-}" ]\`; без ключа S2 тоже работает, но лимиты ниже. Получилось — apiUsed="s2", note начни с "openalex-429→s2".
+2. S2 недоступен / тоже 429 / ключа нет и анонимный лимит выбран → graceful skip: addedPapers=[], note начни с "openalex-429-skip".` : `
+graceful skip: addedPapers=[], note начни с "${hub.api}-429-skip".`}
 Верни строго по схеме SNOWBALL_RESULT: hubId="${hub.externalId}", apiUsed, addedPapers[] (только новые), note.`
 }
 
@@ -450,14 +498,21 @@ function fulltextPrompt(p) {
 DOI: ${p.doi}
 OA PDF/URL: ${p.oaUrl || '(возьми из enrich-файлов в ' + WORK_DIR + ')'}
 
-ЗАДАЧА:
-1. Получи fulltext: \`defuddle parse "{url}" --md\` через Bash ИЛИ firecrawl_scrape (waitFor 5000 для PDF). Загрузи firecrawl через ToolSearch при необходимости.
-2. Извлеки ТОЛЬКО structured summary (≤1K токенов): methods (1-2 предл.), sample_size (N + популяция), inclusion_criteria (2-3), results_primary (1 абзац), limitations (3), conflict_of_interest (дословно), rob_signals (blinding/ITT/allocation concealment/pre-registration).
-3. НЕ возвращай raw PDF text.
+PLUGIN_ROOT = ${PLUGIN_ROOT}
+Пути записаны как {PLUGIN_ROOT}/… — подставляй вместо плейсхолдера строку выше. Литеральный \`{PLUGIN_ROOT}\` в команду не отправляй.
 
-Запиши в ${WORK_DIR}/fulltext_${(p.doi || p.title).replace(/[^a-z0-9]/gi, '').slice(0, 24)}.md.
+ЗАДАЧА:
+1. Получи fulltext — маршрут по типу ссылки:
+   - **PDF** (URL оканчивается на .pdf, arXiv /pdf/, любой OA-PDF-locus): ТОЛЬКО \`bash ${PLUGIN_ROOT}/scripts/pdf-fetch.sh "<url>"\` через Bash → скрипт печатает путь к текстовому файлу → прочитай его через Read. Это 0 кредитов. PDF через firecrawl ЗАПРЕЩЁН — PreToolUse-хук плагина (block-pdf-firecrawl.py) его deny-ит, а постраничный парсинг сжигает по кредиту на страницу.
+     \`exit 2\` (PDF_UNREACHABLE/PDF_EMPTY: JS-gate, скан, paywall) → возьми другой OA-locus из enrich-файлов; если и он не открылся — extracted=false.
+   - **HTML-страница** (журнальная страница, PMC, блог): \`defuddle parse "{url}" --md\` через Bash, при неудаче — firecrawl_scrape (загрузи через ToolSearch). waitFor 5000 только для динамики.
+2. Извлеки ТОЛЬКО structured summary (≤1K токенов): methods (1-2 предл.), sample_size (N + популяция), inclusion_criteria (2-3), results_primary (1 абзац), limitations (3), conflict_of_interest (дословно), rob_signals (blinding/ITT/allocation concealment/pre-registration).
+3. numbersVerbatim[]: для КАЖДОГО числа, которое может попасть в отчёт (N, эффект, CI, p, доза, длительность), верни объект {field, value, quote}, где quote — ДОСЛОВНЫЙ фрагмент из статьи на языке оригинала (≤300 символов, без перевода и без пересказа), содержащий это число. Числа без дословного locator не возвращай. Чисел нет или fulltext недоступен → пустой массив [].
+4. НЕ возвращай raw PDF text.
+
+Запиши в ${WORK_DIR}/fulltext_${(p.doi || p.title).replace(/[^a-z0-9]/gi, '').slice(0, 24)}.md (в файл включи и блок «Числа (verbatim)» с locator-ами).
 ${TOOL_NOTE}
-Верни по схеме FULLTEXT_SCHEMA: doi="${p.doi}", extracted (bool), summary, fileWritten. Если fulltext недоступен — extracted=false, summary="".`
+Верни по схеме FULLTEXT_SCHEMA: doi="${p.doi}", extracted (bool), summary, numbersVerbatim[], fileWritten. Если fulltext недоступен — extracted=false, summary="", numbersVerbatim=[].`
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -538,6 +593,7 @@ work_dir: "${WORK_DIR}"
 - Язык: ${LANG === 'en' ? 'английский' : 'русский'}. Цитаты переводи; оригинал не дублируй.
 - Ссылки ТОЛЬКО одинарные скобки: [pm1·HIGH](url). ❌ НЕ [[pm1]](url). Без wikilinks в body/frontmatter.
 - DOI ТОЛЬКО из данных. Отозванные — не в выводы. Unverified — не в Evidence Table без пометки.
+- ЧИСЛА ТОЛЬКО С LOCATOR: любое число в отчёте (N, размер эффекта, CI, p, доза, длительность) обязано иметь дословный locator — запись в numbersVerbatim[] соответствующего fulltext-файла (поля field/value/quote). Нет quote — числа в отчёте нет: пиши качественно («снижение умеренное»), без цифры. Цифры из абстрактов допустимы только если абстракт процитирован дословно в файле источника.
 - Видимая зона (до первого [!note]-) ≤140 строк.
 
 СОХРАНЕНИЕ: через Write сохрани draft в ${WORK_DIR}/report.md (НЕ в vault — запишет скилл).
@@ -557,7 +613,7 @@ PubPeer-протокол: ${SKILL_DIR}/references/pubpeer-check.md
 
 KEY DOIs для retraction recheck: ${JSON.stringify(keyDois)}
 
-ИНСТРУМЕНТЫ (бюджет): S2 REST ≤13 (paper/search «contradicts OR failed to replicate OR no effect», citations), Crossref curl ≤10 (retraction recheck keyDois), Brave ≤5 (PubPeer + consensus/scite sanity). Загружай brave/firecrawl через ToolSearch.
+ИНСТРУМЕНТЫ (бюджет): S2 REST ≤13 (paper/search «contradicts OR failed to replicate OR no effect», citations), Crossref curl ≤10 (retraction recheck keyDois), Brave ≤5 (PubPeer + sanity-проверка согласия экспертных источников). Загружай brave/firecrawl через ToolSearch.
 ${TOOL_NOTE}
 
 ЗАДАЧА:
@@ -635,7 +691,13 @@ function dedupePapers(list) {
   }
   return out
 }
-let allPapers = dedupePapers(rawPapers).slice(0, PAPER_CAP)
+const uniquePapersRaw = dedupePapers(rawPapers)
+// Телеметрия капов: усечение fan-out'а по PAPER_CAP фиксируем отдельно от усечения snowball'а.
+const capHitFanout = uniquePapersRaw.length > PAPER_CAP
+let allPapers = uniquePapersRaw.slice(0, PAPER_CAP)
+let capHitSnowball = false
+let stoppedBy = 'noHubs'
+log(`Дедуп fan-out: ${rawPapers.length} rawPapers → ${uniquePapersRaw.length} unique${capHitFanout ? ` (усечено до PAPER_CAP=${PAPER_CAP})` : ''}.`)
 log(`Источников ответило: ${searchResults.length}/${runSources.length}, с результатами: ${sourcesAnswered}. Статей: ${rawPapers.length} сырых → ${allPapers.length} уникальных (cap ${PAPER_CAP}).`)
 
 if (sourcesAnswered < MIN_SOURCES) {
@@ -655,9 +717,10 @@ let addedBySnowball = 0
 let saturation = dedup?.saturationEstimate ?? 0
 
 for (let iter = 0; iter < MAX_SNOWBALL_ITERS; iter++) {
-  if (!hubs.length) { log(`Snowball iter ${iter}: нет hub-ов — стоп.`); break }
-  if (allPapers.length >= PAPER_CAP) { log(`Snowball: достигнут PAPER_CAP=${PAPER_CAP} — стоп.`); break }
-  if (budget.remaining() < SNOWBALL_BUDGET_FLOOR) { log(`Snowball: бюджет < ${SNOWBALL_BUDGET_FLOOR} — стоп, к синтезу.`); break }
+  if (!hubs.length) { stoppedBy = 'noHubs'; log(`Snowball iter ${iter}: нет hub-ов — стоп.`); break }
+  if (allPapers.length >= PAPER_CAP) { stoppedBy = 'cap'; capHitSnowball = true; log(`Snowball: достигнут PAPER_CAP=${PAPER_CAP} — стоп.`); break }
+  if (budget.remaining() < SNOWBALL_BUDGET_FLOOR) { stoppedBy = 'budget'; log(`Snowball: бюджет < ${SNOWBALL_BUDGET_FLOOR} — стоп, к синтезу.`); break }
+  stoppedBy = 'iters'   // перезапишется, если цикл выйдет по одному из гейтов ниже
 
   const seenArr = [...seen]
   const chased = (await parallel(hubs.map(h => () =>
@@ -669,7 +732,7 @@ for (let iter = 0; iter < MAX_SNOWBALL_ITERS; iter++) {
   for (const r of chased) for (const p of (r.addedPapers || [])) {
     const k = paperKey(p).toLowerCase()
     if (!k || seen.has(k)) continue
-    seen.add(k); fresh.push({ ...p, _src: p.prefix || 'sn' }); if (allPapers.length + fresh.length >= PAPER_CAP) break
+    seen.add(k); fresh.push({ ...p, _src: p.prefix || 'sn' }); if (allPapers.length + fresh.length >= PAPER_CAP) { capHitSnowball = true; break }
   }
   const newUnique = fresh.length
   allPapers = allPapers.concat(fresh).slice(0, PAPER_CAP)
@@ -679,12 +742,12 @@ for (let iter = 0; iter < MAX_SNOWBALL_ITERS; iter++) {
   saturation = Math.min(1, saturation + (1 - saturation) * Math.max(0, 1 - ratio))
   log(`Snowball iter ${iter}: +${newUnique} новых (ratio ${ratio.toFixed(2)}), всего ${allPapers.length}, saturation≈${saturation.toFixed(2)}`)
 
-  if (ratio < SATURATION_THRESHOLD) { log(`Snowball: насыщение (ratio<${SATURATION_THRESHOLD}) — стоп.`); break }
+  if (ratio < SATURATION_THRESHOLD) { stoppedBy = 'saturation'; log(`Snowball: насыщение (ratio<${SATURATION_THRESHOLD}) — стоп.`); break }
   // hubs для следующей итерации: топ свежих статей с externalId по цитированиям (JS, без агента)
   hubs = fresh.filter(p => p.externalId).sort((a, b) => (b.citations || 0) - (a.citations || 0)).slice(0, HUB_CAP)
     .map(p => ({ externalId: p.externalId, api: /^W\d/i.test(p.externalId) ? 'openalex' : 's2', title: p.title, reason: 'snowball frontier' }))
 }
-log(`Snowball завершён: +${addedBySnowball} статей, корпус ${allPapers.length}, saturation≈${saturation.toFixed(2)}`)
+log(`Snowball завершён: +${addedBySnowball} статей, корпус ${allPapers.length}, saturation≈${saturation.toFixed(2)}, stoppedBy=${stoppedBy}, capHitFanout=${capHitFanout}, capHitSnowball=${capHitSnowball}`)
 
 // ── Phase Enrich (pipeline по батчам DOI: Crossref+Unpaywall, затем fulltext top-OA) ──
 phase('Enrich')
@@ -729,9 +792,18 @@ const fulltextFiles = fulltextResults.map(r => r.fileWritten).filter(Boolean)
 phase('Synthesize')
 const enrichFiles = doiBatches.map((_, i) => `${WORK_DIR}/enrich_${i}.md`)
 const synthFiles = [...sourceFiles, `${WORK_DIR}/_seed.md`, ...enrichFiles, ...fulltextFiles]
-const synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball), w({ label: 'synth', phase: 'Synthesize', schema: SYNTH }))
+const SYNTH_FIELDS = '{reportPath,queryRu,mainConclusion,evidenceStrengthMax,gradeMax,retractedExcluded,relatedCandidates,gaps,keyDois}'
+const synthRolePrompt = synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball)
+const synth = FABLE_BRIDGE
+  ? await agent(bridgePrompt('synth', synthRolePrompt + bridgeTail(SYNTH_FIELDS), 'Read,Write', SYNTH_FIELDS, SYNTH),
+      w({ label: 'synth→fable', phase: 'Synthesize', schema: SYNTH }))
+  : await agent(synthRolePrompt, w({ label: 'synth', phase: 'Synthesize', schema: SYNTH }))
 const reportPath = synth?.reportPath || `${WORK_DIR}/report.md`
-log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthMax}, GRADE_max=${synth?.gradeMax}.`)
+// Честный ai_model: маркер "[bridge-fallback: opus]" в mainConclusion означает,
+// что синтез исполнил Opus, а не Fable — frontmatter отчёта сверяет Phase C скилла.
+const bridgeFallback = FABLE_BRIDGE && /\[bridge-fallback: opus\]/.test(String(synth?.mainConclusion || ''))
+const aiModelActual = FABLE_BRIDGE && !bridgeFallback ? AI_MODEL : 'claude-opus-5'
+log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthMax}, GRADE_max=${synth?.gradeMax}, модель=${aiModelActual}.`)
 
 // ── Phase Adversarial ──
 phase('Adversarial')
@@ -761,6 +833,15 @@ return {
   addedBySnowball,
   saturation,
   enrich: { checked: enrichItems.length, retracted: retractedCount, unverified: unverifiedCount },
+  capStats: {
+    stoppedBy,               // noHubs | cap | budget | saturation | iters
+    capHitFanout,            // PAPER_CAP усёк корпус сразу после fan-out
+    capHitSnowball,          // PAPER_CAP усёк добор snowball'а
+    rawPapers: rawPapers.length,
+    uniquePapers: uniquePapersRaw.length,
+    paperCap: PAPER_CAP,
+  },
+  aiModelActual,
   reportPath,
   queryRu: synth?.queryRu || QUERY_RU,
   relatedCandidates: synth?.relatedCandidates || [],

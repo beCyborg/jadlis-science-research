@@ -108,18 +108,18 @@ curl -s "https://api.semanticscholar.org/graph/v1/paper/${S2_PAPER_ID}/citations
 - Проверить каждый downgrade factor (RoB, inconsistency, indirectness, imprecision, pub bias)
 - Если расхождение → указать конкретный outcome и предложить корректировку
 
-### Шаг 6. Consensus / scite sanity — Brave (max 3 SEQUENTIAL вызова)
+### Шаг 6. Sanity-проверка согласия экспертных источников — Brave (max 3 SEQUENTIAL вызова)
 
 ```
 mcp__plugin_jadlis-research_brave-search__brave_web_search({
   query: "{MAIN_CONCLUSION}",
   count: 5,
-  goggles: "$discard\n$site=consensus.app\n$site=scite.ai"
+  goggles: "$discard\n$site=examine.com\n$site=sciencebasedmedicine.org\n$site=cochranelibrary.com"
 })
 ```
 
-Или раздельно по сайтам (1-2 вызова на consensus.app, 1 на scite.ai).
-Разногласие с основным выводом → WARNING в отчёте.
+Или раздельно по сайтам (1-2 вызова на examine.com, 1 на остальные).
+Расхождение экспертных источников с основным выводом → WARNING в отчёте.
 
 ### Шаг 7. Gaps + Bias assessment (no tools)
 

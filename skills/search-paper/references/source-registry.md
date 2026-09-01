@@ -1,7 +1,7 @@
 # Source Registry
 
-**Версия:** v5.0 (9 search + 2 опц. trust-модуля + 3 enrichment; ядро `search-paper-core`)
-**Дата:** 2026-06-10
+**Версия:** v5.1 (9 search + 3 enrichment; ядро `search-paper-core`)
+**Дата:** 2026-09-01
 
 > Источники оркеструются workflow-ядром `search-paper-core` (Fan-out фаза). Skip по дисциплине и осмысленности делает query-builder (`SEARCH_PLAN.skip`) + JS-фильтр `defaultSources()`. Snowball-фаза добавляет статьи через OpenAlex/S2 `/citations`+`/references` (citation-chasing).
 
@@ -23,13 +23,6 @@
 | epistemonikos | `[ep*]` | firecrawl scrape: `epistemonikos.org/search` (SR-база) | **Brave `$site=epistemonikos.org`** | 8 | discipline=cs,physics; GUIDELINES=false |
 | clinicaltrials | `[ct*]` | REST v2: `clinicaltrials.gov/api/v2/studies` | **No Brave fallback (retry only)** | 20 | discipline=cs,physics |
 
-### Опциональные trust-модули (env-автодетект)
-
-| Module ID | Prefix | Tool | Гейт | Роль |
-|-----------|--------|------|------|------|
-| scite | `[sc*]` | `api.scite.ai/tallies` (Bearer) | `SCITE_API_KEY` set | supporting/contrasting tally по DOI |
-| consensus | `[cn*]` | API / firecrawl scrape `consensus.app` | `CONSENSUS_API_KEY` set | Consensus Meter (yes/possibly/no) |
-
 ### Enrichment sources (Phase 4)
 
 | Source ID | Purpose | Primary Tool | Fallback |
@@ -47,8 +40,6 @@ examine.com
 sciencebasedmedicine.org
 statnews.com
 astralcodexten.com
-scite.ai
-consensus.app
 science.org/blogs/pipeline
 ```
 

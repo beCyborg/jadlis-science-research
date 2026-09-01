@@ -50,7 +50,7 @@ Phase A (INTAKE: S2 recon + decision-first интервью + опц. персо
 
 ```
 PLUGIN_ROOT        = ${CLAUDE_PLUGIN_ROOT}
-VAULT_PATH         = ${user_config.VAULT_PATH}
+VAULT_PATH         = ${user_config.VAULT_PATH}   (пусто или остался литерал ${user_config.VAULT_PATH} — бери ~/Jadlis)
 VAULT_RESEARCH_DIR = {VAULT_PATH}/Знания/Ресерчи
 SKILL_DIR          = {PLUGIN_ROOT}/skills/search-paper
 DATE               = !`date +%Y-%m-%d`   (значение уже подставлено при загрузке скилла)
@@ -104,10 +104,12 @@ DATE               = !`date +%Y-%m-%d`   (значение уже подстав
 
 6. **Сборка `args` + подготовка.** Вычисли `SESSION_ID = ${CLAUDE_SESSION_ID}`;
    `QUERY_SLUG` (транслит латиницей, ≤40, lowercase, дефисы); `QUERY_RU` (краткая русская
-   формулировка ≤25 симв); `WORK_DIR = .search-paper/{SESSION_ID}_{QUERY_SLUG}`.
-   `mkdir -p "{WORK_DIR}" "{VAULT_RESEARCH_DIR}"`.
-   **Env-детект модулей:** `modules = { scite: SCITE_API_KEY непуст, consensus: CONSENSUS_API_KEY непуст }`
-   (через Bash `[ -n "${SCITE_API_KEY:-}" ]`). Сообщи: «Запущен научный ресёрч (always-deep) по N
+   формулировка ≤25 симв); `VAULT_PATH` (пусто или литерал `${user_config.VAULT_PATH}` — `~/Jadlis`);
+   `WORK_DIR = {VAULT_PATH}/.search-paper/{SESSION_ID}_{QUERY_SLUG}` — **всегда АБСОЛЮТНЫЙ путь**
+   (относительный резолвится от cwd на момент спавна агентов: `cd` главной сессии перед
+   resume «терял» файлы при status ok; это касается и `resumeFromRunId`-вызовов —
+   args передавать целиком с тем же абсолютным workDir).
+   `mkdir -p "{WORK_DIR}" "{VAULT_RESEARCH_DIR}"`. Сообщи: «Запущен научный ресёрч (always-deep) по N
    источникам. Ожидаю результаты…»
 
 ## Phase B — INVOKE
@@ -130,19 +132,24 @@ Workflow({
     personalize: true | false,
     profileContext: PROFILE_CONTEXT | null,   // только если personalize
     recon: RECON_SUMMARY,
-    modules: { scite: bool, consensus: bool },
-    aiModel: "<ID модели текущей сессии, напр. claude-opus-5>",
+    aiModel: "claude-fable-5-1",        // модель synth (синтез идёт через Fable-мост)
     date: DATE,
     workDir: WORK_DIR
   }
 })
 ```
 
+Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5
+(`jadlis-research:researcher-opus-xhigh`); **synth — Fable 5.1 через мост** (headless
+`claude -p --model claude-fable-5-1`, биллинг — та же подписка). Отключение моста:
+`fableBridge: false` → synth тоже на Opus 5, и тогда передавай `aiModel: "claude-opus-5"`,
+чтобы frontmatter отчёта не врал.
+
 Ядро само читает протоколы источников, строит per-source запросы, делает snowballing,
 retraction-check всех DOI (Crossref `update-to`), anti-hallucination (`titleMatch`), GRADE
 per-outcome синтез, adversarial review и применяет правки. Дождись `<task-notification>`,
 затем используй объект: `{workDir, status, sourcesAnswered, papersTotal, addedBySnowball,
-reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, synthMeta}`. Прогресс — в `/workflows`.
+reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiModelActual, synthMeta}`. Прогресс — в `/workflows`.
 
 ## Phase C — WRITE (vault-контракт, главная сессия)
 
@@ -152,6 +159,10 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, synthMeta}`. 
    покажи `{WORK_DIR}`, в vault НЕ пиши. Иначе продолжай.
 
 2. **Прочитай draft:** `{WORK_DIR}/report.md`.
+
+2a. **Постпроверка draft — честный `ai_model`.** Сверь frontmatter `ai_model` с `aiModelActual`
+   из объекта workflow (мост мог упасть в fallback на Opus — тогда frontmatter врёт). При
+   расхождении поправь строку на `ai_model: "{aiModelActual}"` перед записью в vault.
 
 3. **Pre-write dedup (obsidian).** Через Bash (если Obsidian открыт; иначе CLI-шаги пропусти):
    ```bash
@@ -182,6 +193,11 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, synthMeta}`. 
    - **Что отсеяли:** `retractedExcluded` (отозванные) + `enrich.unverified` (titleMatch=false, не в
      Evidence Table) + claims, оспоренные критиком — они **не вошли** в выводы (фильтрация, не критика поверх).
    - **Охват:** `papersTotal` статей (из них `addedBySnowball` добавил snowball); `gaps`.
+   - **Границы прогона (`capStats`):** одна строка —
+     «остановка: `stoppedBy` · корпус: `rawPapers`→`uniquePapers` (cap `paperCap`) ·
+     усечение fan-out: `capHitFanout` / snowball: `capHitSnowball`». Любой `capHit*=true`
+     или `stoppedBy` ∈ {cap, budget} → добавь «часть найденного не вошла в корпус».
+   - **Модель синтеза:** `aiModelActual` — та, что сработала (мост мог упасть на Opus).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
    - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:
      per-source, enrich, adversarial.md). Напоминание: `verified: false` → попадёт в

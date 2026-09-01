@@ -93,7 +93,7 @@ mcp__plugin_jadlis-research_brave-search__brave_web_search({
 # Cochrane + Guidelines — результаты по "{REFINED_QUERY_EN}"
 
 ## Ключевые находки
-[3-5 тезисов — акцент на consensus guidelines]
+[3-5 тезисов — акцент на согласованных клинических рекомендациях]
 
 ## Cochrane Reviews
 ### [co1] {Title}
