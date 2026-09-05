@@ -78,6 +78,8 @@ TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 SIGNIN_TITLE_RE = re.compile(r"\b(sign in|log ?in|access denied|just a moment)\b", re.I)
 
 MAX_BODY = 65536
+# `Extractor: defuddle` line in the snapshot header (telemetry only — never a gate input).
+EXTRACTOR_RE = re.compile(r"(?im)^\s*(?:<!--\s*)?(?:extractor|экстрактор)\s*[:=]\s*([A-Za-z0-9_.-]+)")
 PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 WS_RE = re.compile(r"\s+", re.UNICODE)
 
@@ -279,6 +281,17 @@ def wayback_has_record(url: str, timeout: float):
 # ---------------------------------------------------------------------- snapshots
 
 
+def snapshot_extractor(path: str):
+    """Value of the `Extractor:` header line (first 2 KB), or ''."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+            head = fh.read(2048)
+    except Exception:
+        return ""
+    m = EXTRACTOR_RE.search(head)
+    return m.group(1).lower() if m else ""
+
+
 def read_snapshot(path: str):
     """Return (text_body, usable: bool)."""
     try:
@@ -342,6 +355,7 @@ def check_item(item, workdir, per_url, use_wayback):
         "snapshotPath": None,
         "fabricationSuspect": False,
         "snapshotChars": 0,
+        "snapshotExtractor": "",
         "waybackStatus": None,
         "note": "",
         "elapsedMs": 0,
@@ -351,6 +365,7 @@ def check_item(item, workdir, per_url, use_wayback):
         out["snapshotPath"] = snap_path
         quote = item.get("quote") or ""
         if snap_path:
+            out["snapshotExtractor"] = snapshot_extractor(snap_path)
             text, usable = read_snapshot(snap_path)
             # body length is reported even when the snapshot is unusable (< 400 chars or a
             # challenge page): the orchestrator's short-snapshot gate keys off this number.
@@ -392,6 +407,7 @@ def skipped_item(item, workdir):
         "snapshotPath": snap_path,
         "fabricationSuspect": False,
         "snapshotChars": chars,
+        "snapshotExtractor": snapshot_extractor(snap_path) if snap_path else "",
         "waybackStatus": None,
         "note": "deadline",
         "elapsedMs": 0,
