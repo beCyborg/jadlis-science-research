@@ -5,7 +5,8 @@ Reads a JSON array of {prefix, url, quote, snapshotPath} items, then for each it
   * classifies the URL as ok | blocked | dead (HEAD, then ranged GET; challenge/login
     walls count as blocked, not dead);
   * verifies that the claimed quote is actually present in the local snapshot
-    (matched | notFound | notChecked);
+    (matched | notFound | notChecked) and reports the snapshot body length
+    (snapshotChars; 0 = no snapshot) for the orchestrator's short-snapshot gate;
   * for dead URLs, asks the Wayback Machine whether the page ever existed — no record
     means fabricationSuspect.
 
@@ -44,9 +45,11 @@ BLOCKED_CODES = {401, 403, 407, 429, 451, 503}
 DEAD_CODES = {404, 410}
 
 # Domains that answer HEAD/GET from a script with a wall no matter what.
+# x.com / twitter.com removed 2026-09-05 (schema v4): they go through classify_url now —
+# 403/429 -> measured "blocked", 200 + challenge markup -> looks_challenged, 404 -> wayback
+# branch + fabricationSuspect. reddit.com stays: www.reddit.com answers 200 with ~6 chars
+# of text, reclassifying it would strip HIGH from real claims.
 KNOWN_BLOCKED = (
-    "x.com",
-    "twitter.com",
     "reddit.com",
     "linkedin.com",
     "facebook.com",
@@ -338,6 +341,7 @@ def check_item(item, workdir, per_url, use_wayback):
         "quoteStatus": "notChecked",
         "snapshotPath": None,
         "fabricationSuspect": False,
+        "snapshotChars": 0,
         "waybackStatus": None,
         "note": "",
         "elapsedMs": 0,
@@ -346,9 +350,12 @@ def check_item(item, workdir, per_url, use_wayback):
         snap_path = resolve_snapshot(item, workdir)
         out["snapshotPath"] = snap_path
         quote = item.get("quote") or ""
-        if snap_path and quote.strip():
+        if snap_path:
             text, usable = read_snapshot(snap_path)
-            if usable:
+            # body length is reported even when the snapshot is unusable (< 400 chars or a
+            # challenge page): the orchestrator's short-snapshot gate keys off this number.
+            out["snapshotChars"] = len(text)
+            if usable and quote.strip():
                 out["quoteStatus"] = "matched" if quote_matches(quote, text) else "notFound"
 
         status, http_status, note = classify_url(url, per_url)
@@ -369,14 +376,22 @@ def check_item(item, workdir, per_url, use_wayback):
 
 
 def skipped_item(item, workdir):
+    snap_path = resolve_snapshot(item, workdir)
+    chars = 0
+    if snap_path:
+        try:
+            chars = len(read_snapshot(snap_path)[0])
+        except Exception:
+            chars = 0
     return {
         "prefix": item.get("prefix"),
         "url": (item.get("url") or "").strip(),
         "urlStatus": "skipped",
         "httpStatus": None,
         "quoteStatus": "notChecked",
-        "snapshotPath": resolve_snapshot(item, workdir),
+        "snapshotPath": snap_path,
         "fabricationSuspect": False,
+        "snapshotChars": chars,
         "waybackStatus": None,
         "note": "deadline",
         "elapsedMs": 0,
