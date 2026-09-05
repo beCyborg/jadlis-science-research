@@ -95,12 +95,30 @@ def now_iso():
     return _dt.datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+JA_MARKERS = "発開関円売収険験図気帰単実対続読応変沢済検権蔵労働価絵拡広鉱歳斎雑残糸児辞湿処叙将奨焼称証嬢縄畳争総伝仏体余与予"   # Japanese shinjitai forms absent from simplified Chinese
+ZH_MARKERS = "发开关业员门这说时们个为无电东车书长马鸟见页贝龙齐齿产创办买卖过还进达运连远选边计认让设话语读调询导对应变济检权劳动价绘扩广矿岁杂残丝儿处叙将奖烧称证传佛体馀与预"   # simplified Chinese forms absent from Japanese
+
+
 def lang_of(q):
+    """ru / en / mixed, plus ja / zh / ko by Unicode script (Plan 2, tranche 2: language slot)."""
     letters = [c for c in q if c.isalpha()]
     if not letters:
         return "en"
+    n = len(letters)
+    kana = sum(1 for c in letters if "\u3040" <= c <= "\u30ff")          # hiragana + katakana
+    hangul = sum(1 for c in letters if "\uac00" <= c <= "\ud7af" or "\u1100" <= c <= "\u11ff")
+    han = sum(1 for c in letters if "\u4e00" <= c <= "\u9fff" or "\u3400" <= c <= "\u4dbf")
+    if kana / n >= 0.05:
+        return "ja"          # kana is unique to Japanese; Han alone could be either
+    if hangul / n >= 0.2:
+        return "ko"
+    if han / n >= 0.2:
+        # kanji-only query: shinjitai (発 開 売 …) vs simplified (发 开 卖 …) markers decide
+        ja_m = sum(1 for c in letters if c in JA_MARKERS)
+        zh_m = sum(1 for c in letters if c in ZH_MARKERS)
+        return "ja" if ja_m > zh_m else "zh"
     cyr = sum(1 for c in letters if "Ѐ" <= c <= "ӿ")
-    share = cyr / len(letters)
+    share = cyr / n
     if share >= 0.3:
         return "ru"
     if share <= 0.1:
