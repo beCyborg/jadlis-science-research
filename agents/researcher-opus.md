@@ -1,8 +1,8 @@
 ---
-name: researcher-opus-xhigh
+name: researcher-opus
 description: "Workflow-only researcher for full-research/search-paper-core; never invoke."
 model: claude-opus-5
-effort: xhigh
+effort: high
 ---
 
 Never invoke manually — the whole prompt comes from the orchestrator.

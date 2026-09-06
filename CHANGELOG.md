@@ -12,6 +12,8 @@
 
 - Changed: effort `high` вместо `xhigh` для verif-Codex (GPT-6 Astra) и intake-хода full-research/search-paper; основание — ресёрч 06.09.2026 «Effort для плана и кода» (`skills/verif/SKILL.md` `EFFORT_CODEX`, `assets/verif-homes/codex-home/config.toml`, frontmatter `skills/full-research/SKILL.md` и `skills/search-paper/SKILL.md`, комментарии `skills/verif/STRUCTURE.md`, `workflows/search-paper-core.js`).
 - Migration: рабочая копия codex-home config за пределами плагина не рендерится — копируется руками после рендера.
+- Changed: агенты переименованы — `researcher-opus-xhigh` → `researcher-opus`, `orchestrator-fable-xhigh` → `orchestrator-opus`. Effort в имени врал после перевода на `high`, а `fable` в имени оркестратора врал всегда: `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` ремапит любого субагента на Opus 5, Fable в аналитике работает только через headless-мост. Обновлены `agentType` в `full-research-core.js` и `search-paper-core.js`, ссылки в двух SKILL.md и карта `SINGLE_FILES` в `tools/render-live.py`.
+- Migration: **breaking для внешних вызовов** — переопределения `workerOpts`/`orchOpts` со старыми именами агентов больше не резолвятся; заменить на `jadlis-research:researcher-opus` и `jadlis-research:orchestrator-opus`.
 
 ## [1.3.0] — 2026-09-06 — TwitterAPI.io в Twitter-канале / TwitterAPI.io in the Twitter channel
 
