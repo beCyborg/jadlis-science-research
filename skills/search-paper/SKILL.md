@@ -12,7 +12,7 @@ allowed-tools:
   - mcp__plugin_jadlis-research_firecrawl__firecrawl_scrape
 argument-hint: "<query — научный вопрос на русском или английском>"
 model: claude-opus-5
-effort: xhigh
+effort: high
 ---
 
 # /jadlis-research:search-paper — научный литературный обзор (гибрид Skill + Workflow)

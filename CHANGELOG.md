@@ -2,6 +2,17 @@
 
 Формат: [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/).
 
+## [Unreleased]
+
+### Для человека
+
+- Верификатор Codex и intake-ход `full-research` / `search-paper` работают на `high` вместо `xhigh`: столько же качества, заметно меньше токенов и недельной квоты.
+
+### For agents
+
+- Changed: effort `high` вместо `xhigh` для verif-Codex (GPT-6 Astra) и intake-хода full-research/search-paper; основание — ресёрч 06.09.2026 «Effort для плана и кода» (`skills/verif/SKILL.md` `EFFORT_CODEX`, `assets/verif-homes/codex-home/config.toml`, frontmatter `skills/full-research/SKILL.md` и `skills/search-paper/SKILL.md`, комментарии `skills/verif/STRUCTURE.md`, `workflows/search-paper-core.js`).
+- Migration: рабочая копия codex-home config за пределами плагина не рендерится — копируется руками после рендера.
+
 ## [1.3.0] — 2026-09-06 — TwitterAPI.io в Twitter-канале / TwitterAPI.io in the Twitter channel
 
 ### Для человека
