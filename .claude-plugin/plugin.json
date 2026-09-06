@@ -1,9 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "jadlis-research",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Jadlis — ресерч-стек",
-  "description": "Батч 4: search, full-research, search-paper, verif плюс пять MCP-серверов и скилл настройки ключей. full-research — десять каналов (web×3, reddit, twitter, hackernews, substack, yandex, youtube, telegram).",
+  "description": "Батч 4: search, full-research, search-paper, verif плюс пять MCP-серверов и скилл настройки ключей. full-research — четырнадцать каналов (web×3, reddit, twitter, hackernews, substack, yandex, youtube, telegram, языковые слои ja/zh/ko/eu), ledger schema v4 с пер-цитатным снапшот-гейтом.",
   "author": {
     "name": "Be Cyborg"
   },
@@ -43,7 +43,7 @@
     "REDDITAPIS_KEY": {
       "type": "string",
       "title": "RedditAPIs Key (резервный Reddit-MCP, опционально)",
-      "description": "Ключ для запасного сервера reddit-alt (redditapis.com), ~$0.002 за вызов. Без ключа сервер поднимается, но отдаёт 401 — в /mcp он будет гореть красным; это ожидаемо, основной Reddit-канал и no-auth-лестница (Arctic Shift / PullPush) работают без него.",
+      "description": "Ключ для запасного сервера reddit-alt (redditapis.com), ~$0.002 за вызов. Без ключа сервер поднимается, но отдаёт 401 — в /mcp он будет гореть красным; это ожидаемо, основной Reddit-канал и no-auth-лестница (Arctic Shift / Reddit search RSS) работают без него.",
       "sensitive": true,
       "required": false
     },
