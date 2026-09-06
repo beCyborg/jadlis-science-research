@@ -1,16 +1,6 @@
 ---
 name: search-paper
-description: >
-  Научный ресерч: мульти-источниковый поиск (PubMed, Europe PMC, Semantic Scholar,
-  OpenAlex, arXiv, Cochrane, web-experts, Epistemonikos, ClinicalTrials),
-  citation snowballing, обогащение (Crossref retraction-check, Unpaywall, fulltext),
-  GRADE per-outcome synthesis, adversarial review → Obsidian vault (Знания/Ресерчи/).
-  TRIGGER when: user says "научный ресерч", "найди статьи", "что говорит наука",
-  "мета-анализ", "systematic review", "evidence-based", "клинические исследования",
-  "доказательная медицина", "search papers", "research papers", "literature review",
-  "scientific evidence", "PubMed search".
-  DO NOT TRIGGER when: general web search (use /jadlis-research:search), community opinions
-  or full web+community research (use /jadlis-research:full-research), library docs (use Context7).
+description: "Scientific literature research: PubMed, Europe PMC, Semantic Scholar, OpenAlex, arXiv, Cochrane; citation snowballing, retraction check, GRADE synthesis → vault note. Triggers: search papers, literature review, scientific evidence. RU triggers: научный ресерч, найди статьи, что говорит наука, мета-анализ, клинические исследования. Do NOT use for: web search → /search; communities → /full-research."
 allowed-tools:
   - Read
   - Write
