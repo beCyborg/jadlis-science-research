@@ -32,7 +32,7 @@ const WORK_DIR = A.workDir || '.search-paper/dryrun'
 const PLUGIN_ROOT = A.pluginRoot || '.'
 const VAULT_PATH = A.vaultPath || ''
 
-// Воркер: пиннинг Opus 5 + effort xhigh через субагента researcher-opus-xhigh (как в full-research-core).
+// Воркер: пиннинг Opus 5 + effort high через субагента researcher-opus-xhigh (как в full-research-core).
 const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-research:researcher-opus-xhigh' }
 const w = extra => Object.assign({}, WORKER_OPTS, extra)
 
