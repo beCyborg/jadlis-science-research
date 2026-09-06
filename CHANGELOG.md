@@ -2,6 +2,23 @@
 
 Формат: [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/).
 
+## [1.3.0] — 2026-09-06 — TwitterAPI.io в Twitter-канале / TwitterAPI.io in the Twitter channel
+
+### Для человека
+
+- Twitter-канал `full-research` научился брать ответы на тред, профиль автора и тренды детерминированно через TwitterAPI.io, а не «если Grok сам решит».
+- Когда у Grok кончился недельный пул, канал больше не выпадает: при наличии ключа он идёт keyword-only по TwitterAPI.io и честно помечает, что семантики нет.
+- Ключ `TWITTERAPI_IO_KEY` опциональный: без него всё работает как раньше.
+
+### For agents
+
+- Added: `scripts/twitterapi.sh` — REST-обёртка над api.twitterapi.io (`search`, `replies`, `quotes`, `user`, `last`, `tweets`, `trends`, `balance`); ключ через `secret.sh`, `exit 2` без ключа; `User-Agent` обязателен (Cloudflare). REST вместо vendor-MCP: MCP отдаёт пустые `get_trends`, отвергает `queryType=Top` у replies и плющит объекты твитов (проверено 06.09.2026).
+- Changed: `skills/full-research/protocols/twitter-protocol.md` — секция «Degradation slot (off by default)» заменена на «TwitterAPI.io layer»: Mode A (GROK_OK, ≤3 вызова: replies/user/trends после разбора Grok) и Mode B (GROK_DOWN, keyword-only ≤4 вызова, sourceQuality ≤ MEDIUM); `x_thread_fetch` при наличии ключа не запрашивается; бюджет «2 Grok + ≤3 REST».
+- Changed: `skills/full-research/SKILL.md` — гейт `GROK_DOWN` роняет только `grokweb`; `twitter` остаётся при резолве ключа (`twitterapi.sh balance`).
+- Changed: `skills/keys/SKILL.md` — `TWITTERAPI_IO_KEY` в опциональных ключах класса B; `README.md` / `README.en.md` — строка ключа и деградация канала.
+- Changed: `.claude-plugin/plugin.json` — `version` 1.3.0.
+- Migration: none — без ключа поведение прежнее.
+
 ## [1.2.0] — 2026-09-06 — ключи переехали в Связку ключей / keys move to the macOS Keychain
 
 ### Для человека
