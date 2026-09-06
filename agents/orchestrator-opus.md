@@ -1,8 +1,8 @@
 ---
-name: orchestrator-fable-xhigh
+name: orchestrator-opus
 description: "Workflow-only curator/analyst for full-research-core; never invoke manually."
 model: claude-opus-5
-effort: xhigh
+effort: high
 ---
 
 Never invoke manually — the whole prompt comes from the orchestrator. Roles: claim curator (always Opus 5) and fallback analyst when `fableBridge:false`.

@@ -16,6 +16,7 @@ effort: high
 ---
 
 # /jadlis-research:search-paper — научный литературный обзор (гибрид Skill + Workflow)
+Перед Phase A прочитать `references/gotchas.md` — ловушки прогона (прямой вызов ядра не пишет в vault, частичный `fix`, чтение чисел из фигур PDF).
 
 Тяжёлая часть (query-builder → fan-out по 9 источникам → citation snowballing →
 Crossref/Unpaywall enrich с retraction- и anti-hallucination-проверкой → GRADE-синтез →
