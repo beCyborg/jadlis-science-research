@@ -5,8 +5,8 @@ set -euo pipefail
 # Host: searchapi.api.cloud.yandex.net — POST /v2/web/search (sync) | /v2/web/searchAsync (async)
 # Poll: ${YC_OPERATION_HOST:-https://operation.api.cloud.yandex.net}/operations/<id>
 #       404 on primary → auto-fallback to https://searchapi.api.cloud.yandex.net/v2/operations/<id>
-# Auth: Api-Key in ENV YC_SEARCH_API_KEY (set it in `env` of settings.json — skill
-#       /jadlis-research:keys walks you through it);
+# Auth: Api-Key in ENV YC_SEARCH_API_KEY; if unset, resolved through scripts/secret.sh
+#       (macOS Keychain, plugin key standard — the skill /jadlis-research:keys writes it);
 #       service account role search-api.webSearch.user, scope yc.search-api.execute.
 #       folderId NOT required with Api-Key (derived from the key's service account;
 #       verified live 2026-07-17). YC_FOLDER_ID / --folder-id to send it explicitly.
@@ -81,7 +81,8 @@ Behavior:
   -h, --help
 
 Env:
-  YC_SEARCH_API_KEY     Yandex Cloud Api-Key (role search-api.webSearch.user) — required
+  YC_SEARCH_API_KEY     Yandex Cloud Api-Key (role search-api.webSearch.user) — required;
+                        falls back to scripts/secret.sh (Keychain) when the env var is unset
   YC_FOLDER_ID          optional; folderId is derived from the key if omitted
   YC_OPERATION_HOST     optional override of the operation-polling host
 EOF
@@ -300,7 +301,11 @@ fi
 
 # ---------- auth & pricing ----------
 if [[ -z "${YC_SEARCH_API_KEY:-}" ]]; then
-  err "[error] YC_SEARCH_API_KEY not set — add it to \"env\" in settings.json (Yandex Cloud Api-Key, role search-api.webSearch.user); skill /jadlis-research:keys"
+  # Keychain fallback (plugin key standard): scripts/secret.sh resolves env -> Keychain -> legacy env block.
+  YC_SEARCH_API_KEY=$(bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/secret.sh" YC_SEARCH_API_KEY 2>/dev/null || true)
+fi
+if [[ -z "${YC_SEARCH_API_KEY:-}" ]]; then
+  err "[error] YC_SEARCH_API_KEY not set — store it in the macOS Keychain via the skill /jadlis-research:keys (secret.sh --set YC_SEARCH_API_KEY); Yandex Cloud Api-Key, role search-api.webSearch.user"
   exit 2
 fi
 AUTH_HDR="Authorization: Api-Key ${YC_SEARCH_API_KEY}"

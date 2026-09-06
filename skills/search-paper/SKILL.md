@@ -63,6 +63,7 @@ DATE               = !`date +%Y-%m-%d`   (значение уже подстав
 2. **Recon = научный probe (S2 REST, НЕ Brave).** 1 вызов через Bash curl — наполнить
    варианты интервью реальными числами (сколько мета/RCT/observational, какая дисциплина):
    ```bash
+   eval "$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
    Q=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$ARGUMENTS")
    curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=${Q}&limit=15&fields=title,year,citationCount,publicationTypes,fieldsOfStudy" \
      -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}" 2>/dev/null || echo "S2_UNAVAILABLE"

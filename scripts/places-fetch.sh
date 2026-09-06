@@ -5,16 +5,20 @@
 # включает rating → SKU Enterprise ($35/1000, free tier 1000 событий/мес — при
 # research-объёмах бесплатно). НЕ добавляй reviews в маску бездумно (+$5/1000).
 #
-# ГЕЙТ (руки пользователя, ДО первого вызова): ключ GOOGLE_PLACES_API_KEY в "env"
-# файла settings.json (скилл /jadlis-research:keys проводит по шагам) + бюджет-кап
-# в Google Cloud Console — hard cap отсутствует by design, budget alert отключает billing.
+# ГЕЙТ (руки пользователя, ДО первого вызова): ключ GOOGLE_PLACES_API_KEY в Связке
+# ключей macOS (скилл /jadlis-research:keys проводит по шагам; резолв — scripts/secret.sh)
+# + бюджет-кап в Google Cloud Console — hard cap отсутствует by design, budget alert
+# отключает billing.
 set -uo pipefail
 q="${1:?usage: places-fetch.sh \"<запрос>\" [--lang ru|pl] [--limit N]}"; shift || true
 lang=ru; limit=8; region="${PLACES_REGION:-PL}"
 while [ $# -gt 0 ]; do case "$1" in
   --lang) lang="$2"; shift 2;; --limit) limit="$2"; shift 2;; *) echo "unknown opt: $1" >&2; exit 1;; esac; done
+# Фоллбэк на стандарт хранения ключей: env -> Keychain -> legacy env-блок settings.json.
+[ -z "${GOOGLE_PLACES_API_KEY:-}" ] && \
+  GOOGLE_PLACES_API_KEY=$(bash "$(cd "$(dirname "$0")" && pwd)/secret.sh" GOOGLE_PLACES_API_KEY 2>/dev/null || true)
 [ -z "${GOOGLE_PLACES_API_KEY:-}" ] && {
-  echo "PLACES_KEY_MISSING: env GOOGLE_PLACES_API_KEY не задан (скилл /jadlis-research:keys)." >&2
+  echo "PLACES_KEY_MISSING: GOOGLE_PLACES_API_KEY не найден ни в env, ни в Keychain (скилл /jadlis-research:keys)." >&2
   echo "Гейт пользователя: (1) ключ Google Cloud (Places API New), (2) бюджет-кап ДО первого вызова." >&2
   echo "Фоллбэк для агента: mcp__plugin_jadlis-research_brave-search__brave_place_search (country ОБЯЗАТЕЛЕН) — черновик, precision ниже." >&2
   exit 3; }

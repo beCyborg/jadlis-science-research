@@ -1,9 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "jadlis-research",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "displayName": "Jadlis — ресерч-стек",
-  "description": "Батч 4: search, full-research, search-paper, verif плюс пять MCP-серверов и скилл настройки ключей. full-research — четырнадцать каналов (web×3, reddit, twitter, hackernews, substack, yandex, youtube, telegram, языковые слои ja/zh/ko/eu), ledger schema v4 с пер-цитатным снапшот-гейтом.",
+  "description": "Батч 4: search, full-research, search-paper, verif плюс пять MCP-серверов и скилл настройки ключей. Ключи хранятся в Связке ключей macOS и читаются одной точкой scripts/secret.sh. full-research — четырнадцать каналов (web×3, reddit, twitter, hackernews, substack, yandex, youtube, telegram, языковые слои ja/zh/ko/eu), ledger schema v4 с пер-цитатным снапшот-гейтом.",
   "author": {
     "name": "Be Cyborg"
   },
@@ -29,14 +29,14 @@
     "BRAVE_API_KEY": {
       "type": "string",
       "title": "Brave Search API Key",
-      "description": "Тариф Search. Завести: api-dashboard.search.brave.com",
+      "description": "Тариф Search. Завести: api-dashboard.search.brave.com. Значение уезжает в Связку ключей macOS; сменить позже — /plugin configure jadlis-research@jadlis.",
       "sensitive": true,
       "required": true
     },
     "FIRECRAWL_API_KEY": {
       "type": "string",
       "title": "Firecrawl API Key",
-      "description": "Формат fc-… Завести: firecrawl.dev/app/api-keys",
+      "description": "Формат fc-… Завести: firecrawl.dev/app/api-keys. Значение уезжает в Связку ключей macOS; сменить позже — /plugin configure jadlis-research@jadlis.",
       "sensitive": true,
       "required": true
     },
