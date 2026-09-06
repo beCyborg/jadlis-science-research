@@ -151,7 +151,9 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    `status: "synthesis-failed"` (synth вернул null дважды — отчёт не написан) → сообщи об ошибке,
    покажи `{WORK_DIR}`, в vault НЕ пиши, дальше не иди. Иначе продолжай.
 
-2. **Прочитай draft:** `{WORK_DIR}/report.md`.
+2. **Прочитай draft:** по пути из `reportPath` объекта workflow — обычно
+   `{WORK_DIR}/report.md`, но синтезатор иногда сохраняет под другим именем
+   (на живом прогоне вышел `synthesis.md`). Бери `reportPath`, а не зашитое имя.
 
 2a. **Постпроверка draft — честный `ai_model`.** Сверь frontmatter `ai_model` с `aiModelActual`
    из объекта workflow. В норме они совпадают; расхождение означает, что synth на Fable ушёл
