@@ -19,6 +19,7 @@
 Для 3-5 ключевых claims ищи ОПРОВЕРГАЮЩИЕ данные:
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=${CLAIM_URLENCODED}+contradicts+OR+failed+to+replicate+OR+no+effect&limit=5&fields=title,year,citationCount,publicationTypes" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```
@@ -28,6 +29,7 @@ curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=${CLAIM_URL
 ### Шаг 3. Retraction recheck — Crossref curl (top-10 DOI)
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export CROSSREF_MAILTO)"
 for doi in {TOP_10_DOIS}; do
   response=$(curl -s "https://api.crossref.org/works/${doi}?mailto=${CROSSREF_MAILTO}" \
     -H "User-Agent: search-paper/1.0 (mailto:${CROSSREF_MAILTO})")
@@ -90,6 +92,7 @@ mcp__plugin_jadlis-research_brave-search__brave_web_search({
 
 **Citation graph:** для top-3 мета-анализов:
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/${S2_PAPER_ID}/citations?limit=20&fields=title,year,citationCount" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```

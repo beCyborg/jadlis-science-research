@@ -27,7 +27,8 @@ Named sources (arg in brackets):
   heise                  heise.de Atom (feed only — ClaudeBot rule: never crawl the article body)
   xataka                 xataka.com feed (filler)
   meneame                meneame.net RSS (silent 403 → exit 2)
-  wykop <query>          Wykop — API key required (WYKOP_API_KEY); without it exit 3 with the Brave query
+  wykop <query>          Wykop — API key required (WYKOP_API_KEY, env or Keychain via scripts/secret.sh);
+                         without it exit 3 with the Brave query
 
 Exit codes: 0 ok · 2 feed unreachable / empty · 3 source has no feed (use the printed Brave query) · 4 bad args.
 """
@@ -52,6 +53,32 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 THROTTLE_DIR = Path(os.environ.get("TMPDIR", "/tmp")) / ".feed-fetch-throttle"
 TAG_RE = re.compile(r"<[^>]+>")
 WS_RE = re.compile(r"[ \t\r\f\v]+")
+
+# --------------------------------------------------------------------------- keys
+
+
+def secret(name):
+    """Resolve a key: env var first, then scripts/secret.sh (macOS Keychain standard).
+
+    Silent on any failure — a missing key is a normal degradation path here.
+    """
+    v = os.environ.get(name, "").strip()
+    if v:
+        return v
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secret.sh")
+    if not os.path.exists(script):
+        return ""
+    try:
+        import subprocess
+
+        out = subprocess.run(["bash", script, name], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, timeout=15)
+    except Exception:
+        return ""
+    if out.returncode != 0:
+        return ""
+    return out.stdout.decode("utf-8", "replace").strip()
+
 
 # --------------------------------------------------------------------------- sources
 
@@ -79,7 +106,7 @@ SOURCES = {
 NO_FEED = {
     "juejin":   lambda a: _brave_hint(a, "juejin.cn", "Chinese"),
     "disquiet": lambda a: _brave_hint(a, "disquiet.io", "Korean"),
-    "wykop":    lambda a: _brave_hint(a, "wykop.pl", "Polish") if not os.environ.get("WYKOP_API_KEY") else None,
+    "wykop":    lambda a: _brave_hint(a, "wykop.pl", "Polish") if not secret("WYKOP_API_KEY") else None,
 }
 
 # --------------------------------------------------------------------------- helpers

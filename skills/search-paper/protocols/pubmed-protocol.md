@@ -12,12 +12,13 @@
 
 E-utilities требуют `tool` и `email` для восстановления доступа при IP-блокировке:
 - Проверить регистрацию: https://www.ncbi.nlm.nih.gov/account/settings/ → "API Key Management"
-- `tool=search-paper` + `email=${PUBMED_EMAIL}` (твоя почта из `settings.json` → `env`) должны совпадать с NCBI-профилем
+- `tool=search-paper` + `email=${PUBMED_EMAIL}` (почта из Связки ключей, прелюд `secret.sh --export`) должны совпадать с NCBI-профилем
 - Для batch >100 PMIDs: использовать EFetch History workflow (`usehistory=y` → WebEnv + query_key)
 
 ### Search (esearch)
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export PUBMED_API_KEY PUBMED_EMAIL)"
 curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={REFINED_QUERY_EN}&retmax={LIMIT}&api_key=${PUBMED_API_KEY}&tool=search-paper&email=${PUBMED_EMAIL}&retmode=json"
 ```
 
@@ -26,6 +27,7 @@ curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&te
 ### Fetch Abstracts (efetch)
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export PUBMED_API_KEY)"
 curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id={pmids_comma_separated}&rettype=abstract&retmode=xml&api_key=${PUBMED_API_KEY}"
 ```
 

@@ -21,6 +21,7 @@ OpenAlex перешёл на freemium модель с cost-based дневным 
 ### Search
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export OPENALEX_API_KEY OPENALEX_MAILTO)"
 curl -s "https://api.openalex.org/works?search={REFINED_QUERY_EN_URLENCODED}&per_page={LIMIT}&sort=cited_by_count:desc&api_key=${OPENALEX_API_KEY}&mailto=${OPENALEX_MAILTO}"
 ```
 

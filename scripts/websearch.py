@@ -19,7 +19,8 @@ Commands:
 
 Log: $WEBSEARCH_LOG (default ~/.claude/telemetry/search-ab/events.jsonl) — one JSON object per line (kind: call | verdict),
      written with a single os.write in O_APPEND (<=4096 bytes). Schema: references/ab-log.md.
-Keys: EXA_API_KEY (fallback ~/.config/exa/key), BRAVE_API_KEY — env only, never printed.
+Keys: EXA_API_KEY (env -> ~/.config/exa/key -> scripts/secret.sh), BRAVE_API_KEY (env -> scripts/secret.sh).
+      secret.sh reads the macOS Keychain (plugin standard); values are never printed.
 stdout = result only (safe to pipe); stderr = [cost] / [warn] / [error].
 Exit: 0 ok · 1 usage/validation · 2 no key · 3 API error · 4 timeout · 5 unparseable response.
 Python 3.9 stdlib only (Bash tool python3 = /usr/bin/python3 3.9.6).
@@ -199,6 +200,27 @@ def fmt_usd(x):
 
 
 # ---------------------------------------------------------------- keys
+def _secret_sh(name):
+    """Fallback to scripts/secret.sh (Keychain standard). Silent on any failure."""
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secret.sh")
+    if not os.path.exists(script):
+        return None
+    try:
+        import subprocess
+
+        out = subprocess.run(
+            ["bash", script, name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=15,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.decode("utf-8", "replace").strip() or None
+
+
 def exa_key():
     k = os.environ.get("EXA_API_KEY", "").strip()
     if k:
@@ -211,11 +233,11 @@ def exa_key():
                 return k
     except OSError:
         pass
-    return None
+    return _secret_sh("EXA_API_KEY")
 
 
 def brave_key():
-    return os.environ.get("BRAVE_API_KEY", "").strip() or None
+    return os.environ.get("BRAVE_API_KEY", "").strip() or _secret_sh("BRAVE_API_KEY")
 
 
 # ---------------------------------------------------------------- log

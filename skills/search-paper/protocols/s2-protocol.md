@@ -43,6 +43,7 @@ FIELDS="title,authors,year,abstract,citationCount,influentialCitationCount,publi
 ### Search (relevance)
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/search?query=${REFINED_QUERY_EN_URLENCODED}&limit=${LIMIT}&fields=${FIELDS}&fieldsOfStudy=${S2_FIELDS_CSV}&year=${START_YEAR}-${END_YEAR}" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```
@@ -84,6 +85,7 @@ for p in data.get('data', []):
 ### Title search (exact match)
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/search/match?query=${TITLE_URLENCODED}&fields=${FIELDS}" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```
@@ -91,6 +93,7 @@ curl -s "https://api.semanticscholar.org/graph/v1/paper/search/match?query=${TIT
 ### Paper details
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/${PAPER_ID}?fields=${FIELDS}" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```
@@ -98,6 +101,7 @@ curl -s "https://api.semanticscholar.org/graph/v1/paper/${PAPER_ID}?fields=${FIE
 ### Batch paper details (POST, max 500 IDs)
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s -X POST "https://api.semanticscholar.org/graph/v1/paper/batch?fields=${FIELDS}" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}" \
   -H "Content-Type: application/json" \
@@ -107,6 +111,7 @@ curl -s -X POST "https://api.semanticscholar.org/graph/v1/paper/batch?fields=${F
 ### Citations
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/${PAPER_ID}/citations?fields=title,authors,year,citationCount&limit=${LIMIT}&offset=${OFFSET}" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```
@@ -116,6 +121,7 @@ Response: `data[].citingPaper` содержит поля запрошенной 
 ### References
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/${PAPER_ID}/references?fields=title,authors,year,citationCount&limit=${LIMIT}&offset=${OFFSET}" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```
@@ -127,6 +133,7 @@ Response: `data[].citedPaper` содержит поля запрошенной r
 Для сложных запросов с boolean syntax (AND, OR, NOT):
 
 ```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
 curl -s "https://api.semanticscholar.org/graph/v1/paper/search/bulk?query=${BOOLEAN_QUERY_URLENCODED}&fields=${FIELDS}&fieldsOfStudy=${S2_FIELDS_CSV}&year=${START_YEAR}-${END_YEAR}" \
   -H "x-api-key: ${SEMANTIC_SCHOLAR_API_KEY}"
 ```
