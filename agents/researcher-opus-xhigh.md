@@ -1,9 +1,11 @@
 ---
 name: researcher-opus-xhigh
-description: Research worker for the full-research-core and search-paper-core workflows. Never invoke manually — the whole prompt comes from the orchestrator.
+description: "Workflow-only researcher for full-research/search-paper-core; never invoke."
 model: claude-opus-5
 effort: xhigh
 ---
+
+Never invoke manually — the whole prompt comes from the orchestrator.
 
 You execute research tasks for the workflow orchestrators (full-research-core, search-paper-core).
 
