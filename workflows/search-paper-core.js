@@ -25,7 +25,6 @@ const GUIDELINES = A.guidelines !== false                          // включ
 const LANG = A.lang === 'en' ? 'en' : 'ru'
 const PERSONALIZE = !!A.personalize
 const PROFILE_CONTEXT = PERSONALIZE && A.profileContext ? A.profileContext : null
-const AI_MODEL = A.aiModel || 'unknown'
 const DATE = A.date || 'DRYRUN-DATE'
 const WORK_DIR = A.workDir || '.search-paper/dryrun'
 // ${CLAUDE_PLUGIN_ROOT} в JS НЕ подставляется — скилл передаёт его значением.
@@ -37,45 +36,16 @@ const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-research:researcher-opu
 const w = extra => Object.assign({}, WORKER_OPTS, extra)
 
 // Синтез (synth) — единственная роль с реальным Fable-преимуществом (сборка отчёта
-// из большого контекста). CLAUDE_CODE_SUBAGENT_MODEL ремапит субагентов в Opus 5,
-// поэтому Fable достаётся только отдельным headless-процессом `claude -p --model
-// claude-fable-5-1`. Дефолт — мост; отключение: args.fableBridge=false.
-const FABLE_BRIDGE = A.fableBridge !== false
+// из большого контекста). Идёт обычным субагентом: headless-мост существовал только ради
+// обхода собственной CLAUDE_CODE_SUBAGENT_MODEL_FORCE, снятой 07.09.2026. Агенты synth-*
+// пиннят модель, effort high и allow-лист инструментов (у agent() нет опции allowedTools).
+// Имя аргумента остаётся `fableBridge` — один словарь на все восемь воркфлоу.
+const FABLE_SYNTH = A.fableBridge !== false
+const SYNTH_AGENT = FABLE_SYNTH ? 'jadlis-research:synth-fable' : 'jadlis-research:synth-opus'
+// ai_model отчёта печатается по тому, что реально исполнилось, а не по догадке вызывающего.
+const AI_MODEL = FABLE_SYNTH ? 'claude-fable-5-1' : 'claude-opus-5'
+const AI_MODEL_RETRY = 'claude-opus-5'
 
-function bridgePrompt(role, rolePrompt, allowedTools, fieldsHint, schemaObj) {
-  const pf = `${WORK_DIR}/_fable-${role}-prompt.md`
-  const of = `${WORK_DIR}/_fable-${role}-out.json`
-  const sf = `${WORK_DIR}/_fable-${role}-schema.json`
-  // Производная схема для --json-schema: без корневых $schema/$id/title/description
-  // и числовых/строковых констрейнтов (иначе structured_output тихо отключается).
-  // enum НЕ снимаем (SYNTH держит evidenceStrengthMax/gradeMax на enum) — по плану
-  // это помечено «проверить на смоуке»: если structured_output отвалится, снимать enum здесь же.
-  const derived = JSON.parse(JSON.stringify(schemaObj), (k, v) =>
-    (k === 'minLength' || k === 'minimum' || k === 'maximum') ? undefined : v)
-  delete derived.$schema; delete derived.$id; delete derived.title; delete derived.description
-  return `Ты — технический МОСТ к модели Fable 5. Сам ролевую работу НЕ делай (кроме шага «Деградация»). Ровно четыре шага:
-
-1. Через Write запиши в файл ${pf} ДОСЛОВНО весь текст между маркерами <<<ROLE_PROMPT и ROLE_PROMPT>>> (маркеры не включать, текст не менять и не сокращать).
-
-2. Через Write запиши в файл ${sf} ДОСЛОВНО JSON между маркерами <<<SCHEMA и SCHEMA>>>.
-
-3. ОДИН Bash-вызов (параметр timeout: 600000; --settings глушит хуки, < /dev/null обязателен):
-cat "${pf}" | claude -p --model claude-fable-5-1 --effort high --allowedTools "${allowedTools}" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --settings '{"disableAllHooks":true}' --json-schema "$(cat "${sf}")" --output-format json > "${of}" 2>"${WORK_DIR}/_fable-${role}.err" < /dev/null; echo "EXIT=$?"
-
-4. Прочитай ${of} (Read): возьми поле .structured_output — это готовый объект с полями ${fieldsHint}; верни его по своей схеме БЕЗ изменений. Если ключа .structured_output нет — возьми JSON-блок в конце .result.
-
-Деградация: EXIT≠0 или ни .structured_output, ни валидного JSON в .result → один повтор шага 3; если снова сбой — выполни ролевой промпт из ${pf} САМОСТОЯТЕЛЬНО и верни результат по схеме (пометь в первом текстовом поле "[bridge-fallback: opus]"; если ролевой промпт писал файл отчёта с frontmatter — замени в нём ai_model на "claude-opus-5").
-
-<<<SCHEMA
-${JSON.stringify(derived)}
-SCHEMA>>>
-
-<<<ROLE_PROMPT
-${rolePrompt}
-ROLE_PROMPT>>>`
-}
-// Хвост ролевого промпта для headless-исполнения (нет StructuredOutput — финал печатается JSON-блоком)
-const bridgeTail = fieldsHint => `\n\nФИНАЛЬНЫЙ ВЫВОД (ты работаешь в headless-режиме): закончи ответ РОВНО ОДНИМ JSON-объектом с полями ${fieldsHint} внутри блока \`\`\`json ... \`\`\` — и никакого текста после блока.`
 
 // ── Константы always-deep (saturation/cap/budget гейты вместо tiered-режима) ──
 const MIN_SOURCES = 2          // <2 источников → insufficient-sources, скилл не пишет в vault
@@ -518,7 +488,7 @@ ${TOOL_NOTE}
 // ═══════════════════════════════════════════════════════════════════
 // Phase Synthesize — GRADE per-outcome decision-first draft
 // ═══════════════════════════════════════════════════════════════════
-function synthPrompt(allFiles, enrichItems, papersTotal, addedBySnowball) {
+function synthPrompt(allFiles, enrichItems, papersTotal, addedBySnowball, aiModel) {
   const retracted = enrichItems.filter(e => e.isRetracted).map(e => e.doi)
   const unverified = enrichItems.filter(e => e.crossrefVerified && !e.titleMatch).map(e => e.doi)
   return `Ты — научный аналитик-синтезатор. Из сырья источников + enrich + fulltext построй ДОКАЗАТЕЛЬНЫЙ отчёт в формате DECISION-FIRST: читатель видит выводы/действия/кому верить; процесс (GRADE-таблица, Evidence Table, ссылки) — в свёрнутых [!note]- в конце.
@@ -555,7 +525,7 @@ type: research
 created: ${DATE}
 ai_drafted: true
 verified: false
-ai_model: "${AI_MODEL}"
+ai_model: "${aiModel}"
 tags: []
 query: "${QUERY_RU.replace(/"/g, '«')}"
 decision: "${DECISION.replace(/"/g, '«') || ''}"
@@ -792,17 +762,30 @@ const fulltextFiles = fulltextResults.map(r => r.fileWritten).filter(Boolean)
 phase('Synthesize')
 const enrichFiles = doiBatches.map((_, i) => `${WORK_DIR}/enrich_${i}.md`)
 const synthFiles = [...sourceFiles, `${WORK_DIR}/_seed.md`, ...enrichFiles, ...fulltextFiles]
-const SYNTH_FIELDS = '{reportPath,queryRu,mainConclusion,evidenceStrengthMax,gradeMax,retractedExcluded,relatedCandidates,gaps,keyDois}'
-const synthRolePrompt = synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball)
-const synth = FABLE_BRIDGE
-  ? await agent(bridgePrompt('synth', synthRolePrompt + bridgeTail(SYNTH_FIELDS), 'Read,Write', SYNTH_FIELDS, SYNTH),
-      w({ label: 'synth→fable', phase: 'Synthesize', schema: SYNTH }))
-  : await agent(synthRolePrompt, w({ label: 'synth', phase: 'Synthesize', schema: SYNTH }))
-const reportPath = synth?.reportPath || `${WORK_DIR}/report.md`
-// Честный ai_model: маркер "[bridge-fallback: opus]" в mainConclusion означает,
-// что синтез исполнил Opus, а не Fable — frontmatter отчёта сверяет Phase C скилла.
-const bridgeFallback = FABLE_BRIDGE && /\[bridge-fallback: opus\]/.test(String(synth?.mainConclusion || ''))
-const aiModelActual = FABLE_BRIDGE && !bridgeFallback ? AI_MODEL : 'claude-opus-5'
+// Опции собираются явно, НЕ через w(): переданный вызывающим workerOpts.model пережил бы
+// слияние и побил frontmatter агента (per-invocation модель приоритетнее).
+const synthOpts = (label, agentType) => ({ label, phase: 'Synthesize', schema: SYNTH, agentType })
+
+let synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL),
+  synthOpts(FABLE_SYNTH ? 'synth→fable' : 'synth', SYNTH_AGENT))
+
+// Одна попытка на Opus 5 — только на Fable-ветке: при fableBridge:false первый вызов уже был
+// на Opus, и повтор перезапустил бы то, что человек мог пропустить намеренно.
+let synthFellBack = false
+if (!synth && FABLE_SYNTH) {
+  log('synth (Fable) вернул null — одна попытка на Opus 5.')
+  synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL_RETRY),
+    synthOpts('synth→opus-retry', 'jadlis-research:synth-opus'))
+  synthFellBack = true
+}
+// Ранний выход обязателен: без него прогон молча уходит в Adversarial и возвращает
+// status:'ok' без подтверждённого отчёта — хуже падения.
+if (!synth) {
+  log('Синтез не удался дважды. Материалы собраны, отчёт не написан.')
+  return { workDir: WORK_DIR, status: 'synthesis-failed', papersTotal: allPapers.length }
+}
+const reportPath = synth.reportPath || `${WORK_DIR}/report.md`
+const aiModelActual = (FABLE_SYNTH && !synthFellBack) ? 'claude-fable-5-1' : 'claude-opus-5'
 log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthMax}, GRADE_max=${synth?.gradeMax}, модель=${aiModelActual}.`)
 
 // ── Phase Adversarial ──

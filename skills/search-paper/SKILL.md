@@ -124,7 +124,6 @@ Workflow({
     personalize: true | false,
     profileContext: PROFILE_CONTEXT | null,   // только если personalize
     recon: RECON_SUMMARY,
-    aiModel: "claude-fable-5-1",        // модель synth (синтез идёт через Fable-мост)
     date: DATE,
     workDir: WORK_DIR
   }
@@ -132,10 +131,11 @@ Workflow({
 ```
 
 Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5
-(`jadlis-research:researcher-opus`); **synth — Fable 5.1 через мост** (headless
-`claude -p --model claude-fable-5-1`, биллинг — та же подписка). Отключение моста:
-`fableBridge: false` → synth тоже на Opus 5, и тогда передавай `aiModel: "claude-opus-5"`,
-чтобы frontmatter отчёта не врал.
+(`jadlis-research:researcher-opus`); **synth — Fable 5.1 обычным субагентом**
+(`jadlis-research:synth-fable`, effort high). `fableBridge: false` → synth уходит на
+`jadlis-research:synth-opus`. `aiModel` НЕ передавай: ядро само выводит значение для frontmatter
+и возвращает в `aiModelActual` ту модель, что реально сработала (synth на Fable, вернувший null,
+один раз ретраится на Opus 5).
 
 Ядро само читает протоколы источников, строит per-source запросы, делает snowballing,
 retraction-check всех DOI (Crossref `update-to`), anti-hallucination (`titleMatch`), GRADE
@@ -147,14 +147,15 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
 
 Контракт: `${CLAUDE_PLUGIN_ROOT}/shared/obsidian-write-contract.md` (не менять). Шаги:
 
-1. **Частичный результат.** `status: "insufficient-sources"` (<2 источников) → сообщи об ошибке,
-   покажи `{WORK_DIR}`, в vault НЕ пиши. Иначе продолжай.
+1. **Частичный результат.** `status: "insufficient-sources"` (<2 источников) или
+   `status: "synthesis-failed"` (synth вернул null дважды — отчёт не написан) → сообщи об ошибке,
+   покажи `{WORK_DIR}`, в vault НЕ пиши, дальше не иди. Иначе продолжай.
 
 2. **Прочитай draft:** `{WORK_DIR}/report.md`.
 
 2a. **Постпроверка draft — честный `ai_model`.** Сверь frontmatter `ai_model` с `aiModelActual`
-   из объекта workflow (мост мог упасть в fallback на Opus — тогда frontmatter врёт). При
-   расхождении поправь строку на `ai_model: "{aiModelActual}"` перед записью в vault.
+   из объекта workflow. В норме они совпадают; расхождение означает, что synth на Fable ушёл
+   в ретрай на Opus — поправь строку на `ai_model: "{aiModelActual}"` перед записью в vault.
 
 3. **Pre-write dedup (obsidian).** Через Bash (если Obsidian открыт; иначе CLI-шаги пропусти):
    ```bash
@@ -189,7 +190,7 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
      «остановка: `stoppedBy` · корпус: `rawPapers`→`uniquePapers` (cap `paperCap`) ·
      усечение fan-out: `capHitFanout` / snowball: `capHitSnowball`». Любой `capHit*=true`
      или `stoppedBy` ∈ {cap, budget} → добавь «часть найденного не вошла в корпус».
-   - **Модель синтеза:** `aiModelActual` — та, что сработала (мост мог упасть на Opus).
+   - **Модель синтеза:** `aiModelActual` — та, что сработала (Fable либо Opus 5 на ретрае).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
    - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:
      per-source, enrich, adversarial.md). Напоминание: `verified: false` → попадёт в
@@ -198,6 +199,8 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
 ## Обработка ошибок
 
 - `insufficient-sources` (<2 источников с результатами) — покажи что собралось, в vault не пиши.
+- `synthesis-failed` — synth вернул null и на Fable, и на ретрае Opus. Материал в `{WORK_DIR}` есть,
+  отчёта нет: покажи рабочую папку, в vault не пиши.
 - Source-агенты имеют встроенные фоллбэки внутри протоколов (Brave `site:` / retry).
 - obsidian CLI недоступен (Obsidian закрыт) — vault-контракт деградирует: пиши файл в `REPORT_PATH`
   без dedup/wikilinks/записи в дневную заметку, предупреди пользователя. Callouts работают всегда.
