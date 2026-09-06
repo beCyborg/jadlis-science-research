@@ -32,8 +32,8 @@ const WORK_DIR = A.workDir || '.search-paper/dryrun'
 const PLUGIN_ROOT = A.pluginRoot || '.'
 const VAULT_PATH = A.vaultPath || ''
 
-// Воркер: пиннинг Opus 5 + effort high через субагента researcher-opus-xhigh (как в full-research-core).
-const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-research:researcher-opus-xhigh' }
+// Воркер: пиннинг Opus 5 + effort high через субагента researcher-opus (как в full-research-core).
+const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-research:researcher-opus' }
 const w = extra => Object.assign({}, WORKER_OPTS, extra)
 
 // Синтез (synth) — единственная роль с реальным Fable-преимуществом (сборка отчёта

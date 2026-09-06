@@ -131,7 +131,7 @@ Workflow({
 ```
 
 Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5
-(`jadlis-research:researcher-opus-xhigh`); **synth — Fable 5.1 через мост** (headless
+(`jadlis-research:researcher-opus`); **synth — Fable 5.1 через мост** (headless
 `claude -p --model claude-fable-5-1`, биллинг — та же подписка). Отключение моста:
 `fableBridge: false` → synth тоже на Opus 5, и тогда передавай `aiModel: "claude-opus-5"`,
 чтобы frontmatter отчёта не врал.
