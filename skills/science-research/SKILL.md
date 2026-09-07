@@ -1,5 +1,5 @@
 ---
-name: search-paper
+name: science-research
 description: "Scientific literature research: PubMed, Europe PMC, Semantic Scholar, OpenAlex, arXiv, Cochrane; citation snowballing, retraction check, GRADE synthesis → vault note. Triggers: search papers, literature review, scientific evidence. RU triggers: научный ресерч, найди статьи, что говорит наука, мета-анализ, клинические исследования. Do NOT use for: web search → /search; communities → /full-research."
 allowed-tools:
   - Read
@@ -8,14 +8,14 @@ allowed-tools:
   - Bash
   - AskUserQuestion
   - Workflow
-  - mcp__plugin_jadlis-research_brave-search__brave_web_search
-  - mcp__plugin_jadlis-research_firecrawl__firecrawl_scrape
+  - mcp__plugin_search_brave-search__brave_web_search
+  - mcp__plugin_search_firecrawl__firecrawl_scrape
 argument-hint: "<query — научный вопрос на русском или английском>"
 model: claude-opus-5
 effort: high
 ---
 
-# /jadlis-research:search-paper — научный литературный обзор (гибрид Skill + Workflow)
+# /science-research — научный литературный обзор (гибрид Skill + Workflow)
 Перед Phase A прочитать `references/gotchas.md` — ловушки прогона (прямой вызов ядра не пишет в vault, частичный `fix`, чтение чисел из фигур PDF).
 
 Тяжёлая часть (query-builder → fan-out по 9 источникам → citation snowballing →
@@ -131,9 +131,9 @@ Workflow({
 ```
 
 Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5
-(`jadlis-research:researcher-opus`); **synth — Fable 5.1 обычным субагентом**
-(`jadlis-research:synth-fable`, effort high). `fableBridge: false` → synth уходит на
-`jadlis-research:synth-opus`. `aiModel` НЕ передавай: ядро само выводит значение для frontmatter
+(`science-research:researcher-opus`); **synth — Fable 5.1 обычным субагентом**
+(`science-research:synth-fable`, effort high). `fableBridge: false` → synth уходит на
+`science-research:synth-opus`. `aiModel` НЕ передавай: ядро само выводит значение для frontmatter
 и возвращает в `aiModelActual` ту модель, что реально сработала (synth на Fable, вернувший null,
 один раз ретраится на Opus 5).
 
