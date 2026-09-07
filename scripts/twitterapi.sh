@@ -33,7 +33,7 @@ if [ -z "${TWITTERAPI_IO_KEY:-}" ]; then
 fi
 
 BASE="https://api.twitterapi.io"
-UA="jadlis-research/1.0"   # Cloudflare in front of the API blocks requests without a User-Agent
+UA="jadlis-search/1.0"   # Cloudflare in front of the API blocks requests without a User-Agent
 op="${1:-}"; shift || true
 
 req() {  # req <path> [--data-urlencode k=v ...]

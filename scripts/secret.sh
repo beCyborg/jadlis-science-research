@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# secret.sh — единая точка чтения ключей плагина jadlis-research.
+# secret.sh — единая точка чтения ключей ресерч-стека Jadlis (плагин search).
 #
 # Стандарт хранения: ключ вводится один раз и живёт в Связке ключей macOS (Keychain),
 # не в файлах репозитория и не в shell-профиле. Два класса:
@@ -7,16 +7,17 @@
 #       YOUTUBE_API_KEY). Пишет их Claude Code при включении плагина (userConfig,
 #       sensitive: true) в запись Keychain `Claude Code-credentials` → pluginSecrets.
 #   B — ключи скриптов и curl-блоков протоколов (научные источники, Exa, YC, Places,
-#       контактные почты). Пишет их скилл /jadlis-research:keys как generic password:
-#       service `jadlis-research`, account = имя ключа.
+#       контактные почты). Пишет их скилл /search:keys как generic password:
+#       service `jadlis`, account = имя ключа.
 #
 # ЗНАЧЕНИЯ КЛЮЧЕЙ НЕ ПЕЧАТАЮТСЯ НИГДЕ, КРОМЕ РЕЖИМОВ `KEY` И `--export`.
 
 set -uo pipefail
 
-SERVICE="jadlis-research"
-PLUGIN_ID_PREFIX="jadlis-research@"
-PLUGIN_ID_DEFAULT="jadlis-research@jadlis"
+SERVICE="jadlis"
+SERVICE_LEGACY="jadlis-research"   # ключи, записанные до split 2026-09
+PLUGIN_ID_PREFIX="search@"
+PLUGIN_ID_DEFAULT="search@jadlis"
 
 # Известные ключи для --list.
 KNOWN_KEYS_A="BRAVE_API_KEY FIRECRAWL_API_KEY REDDITAPIS_KEY YOUTUBE_API_KEY"
@@ -30,13 +31,13 @@ SERVICES_CACHE=""
 
 usage() {
   cat <<'USAGE'
-secret.sh — чтение ключей плагина jadlis-research из Связки ключей macOS.
+secret.sh — чтение ключей ресерч-стека Jadlis из Связки ключей macOS.
 
 Порядок разрешения (первый непустой побеждает):
   1. переменная окружения $KEY
-  2. Keychain generic password: service `jadlis-research`, account KEY
+  2. Keychain generic password: service `jadlis`, account KEY
   3. pluginSecrets из блоба `Claude Code-credentials` (затем `Claude Code-credentials-*`)
-  4. <config-dir>/.credentials.json → .pluginSecrets["jadlis-research@<marketplace>"][KEY]
+  4. <config-dir>/.credentials.json → .pluginSecrets["search@<marketplace>"][KEY]
   5. <config-dir>/settings.json → .env[KEY]   (legacy-рельса)
 Ничего не нашли → exit 1 и пустой stdout.
 
@@ -83,7 +84,7 @@ credential_services() {
 }
 
 # jq-выражение: достать $k из pluginSecrets — сперва по каноническому id
-# `jadlis-research@jadlis`, затем по любому `jadlis-research@<marketplace>`.
+# `search@jadlis`, затем по любому `search@<marketplace>`.
 PLUGIN_SECRET_JQ='
 (.pluginSecrets // {}) as $ps
 | ( $ps[$id][$k]?
@@ -102,10 +103,12 @@ resolve() {
   if [ -n "$v" ]; then printf '%s%s%s' "env" "$TAB" "$v"; return 0; fi
 
   if have_security; then
-    v=$(security find-generic-password -s "$SERVICE" -a "$key" -w 2>/dev/null)
-    if [ -n "${v:-}" ]; then
-      printf '%s%s%s' "keychain generic ($SERVICE/$key)" "$TAB" "$v"; return 0
-    fi
+    for svc in "$SERVICE" "$SERVICE_LEGACY"; do
+      v=$(security find-generic-password -s "$svc" -a "$key" -w 2>/dev/null)
+      if [ -n "${v:-}" ]; then
+        printf '%s%s%s' "keychain generic ($svc/$key)" "$TAB" "$v"; return 0
+      fi
+    done
   fi
 
   if have_security && have_jq; then
@@ -209,7 +212,7 @@ list_group() {
 mode_list() {
   printf '  %-26s %-6s %s\n' "КЛЮЧ" "ДЛИНА" "ИСТОЧНИК"
   list_group "— класс A: MCP-серверы плагина (спрашивает Claude Code) —" "$KNOWN_KEYS_A"
-  list_group "— класс B: скрипты и curl-блоки (пишет /jadlis-research:keys) —" "$KNOWN_KEYS_B"
+  list_group "— класс B: скрипты и curl-блоки (пишет /search:keys) —" "$KNOWN_KEYS_B"
 }
 
 main() {
