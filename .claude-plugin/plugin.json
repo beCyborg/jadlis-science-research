@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "science-research",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "displayName": "Jadlis — научный ресерч",
   "description": "PubMed, Europe PMC, Semantic Scholar, OpenAlex, arXiv, Cochrane; снежный ком по цитированиям, проверка отзыва статьи, GRADE-синтез → заметка в vault. Требует плагин search (ключи Brave и Firecrawl).",
   "author": {

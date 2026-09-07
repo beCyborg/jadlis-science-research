@@ -58,7 +58,7 @@ const FULLTEXT_CAP = 6         // top-OA статей под fulltext-summary
 const SNOWBALL_BUDGET_FLOOR = 80_000   // не начинать итерацию snowball, если меньше осталось
 const FULLTEXT_BUDGET_FLOOR = 50_000   // не тянуть fulltext, если меньше осталось
 
-const SKILL_DIR = `${PLUGIN_ROOT}/skills/search-paper`
+const SKILL_DIR = `${PLUGIN_ROOT}/skills/science-research`
 const PROTO = id => `${SKILL_DIR}/protocols/${id}`
 
 // ── Реестр источников: 9 бесплатных ──
