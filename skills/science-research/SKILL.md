@@ -43,7 +43,7 @@ Phase A (INTAKE: S2 recon + decision-first интервью + опц. персо
 PLUGIN_ROOT        = ${CLAUDE_PLUGIN_ROOT}
 VAULT_PATH         = ${user_config.VAULT_PATH}   (пусто или остался литерал ${user_config.VAULT_PATH} — бери ~/Jadlis)
 VAULT_RESEARCH_DIR = {VAULT_PATH}/Знания/Ресерчи
-SKILL_DIR          = {PLUGIN_ROOT}/skills/search-paper
+SKILL_DIR          = {PLUGIN_ROOT}/skills/science-research
 DATE               = !`date +%Y-%m-%d`   (значение уже подставлено при загрузке скилла)
 ```
 
