@@ -1,1 +1,1 @@
-search unreleased (split 2026-09-07 from jadlis-research 1.3.0)
+search search--v1.0.0 2ad3666bf41e009f0d904e612b665ce6c34eb55b
