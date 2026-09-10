@@ -6,7 +6,7 @@ set -euo pipefail
 # Poll: ${YC_OPERATION_HOST:-https://operation.api.cloud.yandex.net}/operations/<id>
 #       404 on primary → auto-fallback to https://searchapi.api.cloud.yandex.net/v2/operations/<id>
 # Auth: Api-Key in ENV YC_SEARCH_API_KEY; if unset, resolved through scripts/secret.sh
-#       (macOS Keychain, plugin key standard — the skill /search:keys writes it);
+#       (macOS Keychain, plugin key standard — the skill /jadlis-search:keys writes it);
 #       service account role search-api.webSearch.user, scope yc.search-api.execute.
 #       folderId NOT required with Api-Key (derived from the key's service account;
 #       verified live 2026-07-17). YC_FOLDER_ID / --folder-id to send it explicitly.
@@ -305,7 +305,7 @@ if [[ -z "${YC_SEARCH_API_KEY:-}" ]]; then
   YC_SEARCH_API_KEY=$(bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/secret.sh" YC_SEARCH_API_KEY 2>/dev/null || true)
 fi
 if [[ -z "${YC_SEARCH_API_KEY:-}" ]]; then
-  err "[error] YC_SEARCH_API_KEY not set — store it in the macOS Keychain via the skill /search:keys (secret.sh --set YC_SEARCH_API_KEY); Yandex Cloud Api-Key, role search-api.webSearch.user"
+  err "[error] YC_SEARCH_API_KEY not set — store it in the macOS Keychain via the skill /jadlis-search:keys (secret.sh --set YC_SEARCH_API_KEY); Yandex Cloud Api-Key, role search-api.webSearch.user"
   exit 2
 fi
 AUTH_HDR="Authorization: Api-Key ${YC_SEARCH_API_KEY}"

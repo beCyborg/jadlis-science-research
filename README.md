@@ -7,13 +7,13 @@
 заголовка.
 
 ```
-claude plugin marketplace add https://github.com/beCyborg/jadlis-start.git
-claude plugin install search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
-claude plugin install science-research@jadlis
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub
+claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
+claude plugin install jadlis-science-research@jadlis
 ```
 
-Порядок важен: `science-research` тянет `search` как зависимость, но при авто-установке ключи не
-спрашиваются — поэтому `search` ставится отдельно и сразу с ключами.
+Порядок важен: `jadlis-science-research` тянет `jadlis-search` как зависимость, но при
+авто-установке ключи не спрашиваются — поэтому `jadlis-search` ставится отдельно и сразу с ключами.
 
 ![Один вопрос уходит в научные базы, отозванные и неверифицированные статьи вынесены отдельно, у выводов стоит уровень доказательства](docs/img/hero-jadlis-science-research.webp)
 
@@ -54,17 +54,17 @@ Crossref на отзыв и на совпадение заголовка, зат
 **а) Текст для вставки агенту.** Скопируй целиком в чат Claude Code:
 
 ```
-Ты — установщик. Поставь на этот Mac плагин science-research из маркетплейса jadlis.
+Ты — установщик. Поставь на этот Mac плагин jadlis-science-research из маркетплейса jadlis.
 Выполни ровно эти команды, дословно, ничего не сокращая:
-1. claude plugin marketplace add https://github.com/beCyborg/jadlis-start.git
-2. claude plugin install search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
-3. claude plugin install science-research@jadlis
-4. claude plugin list — покажи мне строки про search и science-research и их версии.
-5. /search:keys — заведи ключи научных источников: PubMed, Semantic Scholar, OpenAlex
+1. claude plugin marketplace add https://github.com/beCyborg/jadlis-hub
+2. claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
+3. claude plugin install jadlis-science-research@jadlis
+4. claude plugin list — покажи мне строки про jadlis-search и jadlis-science-research и их версии.
+5. /jadlis-search:keys — заведи ключи научных источников: PubMed, Semantic Scholar, OpenAlex
    и почты для Crossref и Unpaywall.
 Значения ключей Brave и Firecrawl вместо многоточий спроси у меня и подставь сам.
-Порядок команд не меняй: science-research тянет search как зависимость, но при авто-установке
-ключи не спрашиваются — поэтому search ставится отдельно и сразу с ключами.
+Порядок команд не меняй: jadlis-science-research тянет jadlis-search как зависимость, но при
+авто-установке ключи не спрашиваются — поэтому jadlis-search ставится отдельно и сразу с ключами.
 Перед каждой командой покажи её мне целиком и дождись «да». Сказал «нет» — не выполняй,
 скажи, что именно пропустил, и иди дальше.
 Команда вернула ошибку — остановись, покажи вывод, к следующей не переходи.
@@ -74,14 +74,14 @@ Crossref на отзыв и на совпадение заголовка, зат
 **б) Команды руками.**
 
 ```
-claude plugin marketplace add https://github.com/beCyborg/jadlis-start.git
-claude plugin install search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
-claude plugin install science-research@jadlis
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub
+claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
+claude plugin install jadlis-science-research@jadlis
 claude plugin list
 ```
 
 Первая команда ничего не ставит — она добавляет маркетплейс. Ставит только вторая и третья, и
-снимается это одной строкой: `claude plugin uninstall science-research@jadlis --keep-data`.
+снимается это одной строкой: `claude plugin uninstall jadlis-science-research@jadlis --keep-data`.
 
 **в) Короткая команда.** Открой Claude Code в папке, где работаешь, и набери:
 
@@ -105,23 +105,23 @@ claude plugin list
 Crossref — отзыв, который туда не попал, плагин не увидит. И не решает за тебя: заметка выходит с
 пометкой «не проверено человеком», ревью — твоё.
 
-**Что нужно.** Плагин `search` с ключами Brave и Firecrawl — ставится первым, ими работают
+**Что нужно.** Плагин `jadlis-search` с ключами Brave и Firecrawl — ставится первым, ими работают
 Cochrane, гайдлайны и Epistemonikos. Отдельно нужны ключи научных источников — PubMed, Semantic
 Scholar, OpenAlex и контактные почты для Crossref и Unpaywall: они заводятся один раз командой
-`/search:keys`, значения уезжают в Связку ключей macOS. Без них часть баз уходит на анонимные
+`/jadlis-search:keys`, значения уезжают в Связку ключей macOS. Без них часть баз уходит на анонимные
 лимиты и отвечает через раз. Чужие тарифы не пересказываю: счета у поставщиков. Папка заметок
 задаётся при установке (`VAULT_PATH`, по умолчанию `~/Jadlis`) — отчёт ложится в `Знания/Ресерчи`.
 Obsidian закрыт — дедуп и простановка ссылок пропускаются, файл всё равно пишется.
 
-Ключи хранятся в Связке ключей macOS; работает ли это на других системах — [уточнить].
+Ключи хранятся в Связке ключей macOS; на Linux такого же помощника на базе `security` нет,
+поэтому под Linux не проверялось.
 
 **Порядок расхода токенов.** Тяжёлый прогон — десятки субагентов из твоей квоты: базы, добор по
 цитированиям, проверка DOI батчами, синтез, критик и правки. Несколько прогонов подряд в одно окно
 не помещаются — планируй научный разбор как отдельную задачу на сессию, а не как быстрый вопрос
 между делом. Во что это обходится в деньгах — не мерил и цифру не назову.
 
-**Проверено там, где я работаю:** мой Mac, моя подписка, мои ключи. Где ещё это работает —
-[уточнить].
+**Проверено там, где я работаю:** мой Mac, моя подписка, мои ключи. Проверялось только на macOS.
 
 **Условия использования.** Лицензии нет: все права сохранены за автором. Читать и
 пользоваться лично можно. Коммерческое использование, переиздание и включение в свои
@@ -132,12 +132,12 @@ Obsidian закрыт — дедуп и простановка ссылок пр
 
 ```
 claude plugin marketplace update jadlis
-claude plugin update science-research@jadlis
+claude plugin update jadlis-science-research@jadlis
 claude plugin list
 ```
 
 Переустановка, если что-то встало криво:
 
 ```
-claude plugin uninstall science-research@jadlis --keep-data && claude plugin install science-research@jadlis
+claude plugin uninstall jadlis-science-research@jadlis --keep-data && claude plugin install jadlis-science-research@jadlis
 ```
