@@ -8,8 +8,8 @@ allowed-tools:
   - Bash
   - AskUserQuestion
   - Workflow
-  - mcp__plugin_search_brave-search__brave_web_search
-  - mcp__plugin_search_firecrawl__firecrawl_scrape
+  - mcp__plugin_jadlis-search_brave-search__brave_web_search
+  - mcp__plugin_jadlis-search_firecrawl__firecrawl_scrape
 argument-hint: "<query — научный вопрос на русском или английском>"
 model: claude-opus-5
 effort: high
@@ -131,9 +131,9 @@ Workflow({
 ```
 
 Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5
-(`science-research:researcher-opus`); **synth — Fable 5.1 обычным субагентом**
-(`science-research:synth-fable`, effort high). `fableBridge: false` → synth уходит на
-`science-research:synth-opus`. `aiModel` НЕ передавай: ядро само выводит значение для frontmatter
+(`jadlis-science-research:researcher-opus`); **synth — Fable 5.1 обычным субагентом**
+(`jadlis-science-research:synth-fable`, effort high). `fableBridge: false` → synth уходит на
+`jadlis-science-research:synth-opus`. `aiModel` НЕ передавай: ядро само выводит значение для frontmatter
 и возвращает в `aiModelActual` ту модель, что реально сработала (synth на Fable, вернувший null,
 один раз ретраится на Opus 5).
 

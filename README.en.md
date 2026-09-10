@@ -7,13 +7,14 @@ Crossref for retraction and for a matching title, and the conclusion is graded w
 strength of the evidence, not the loudness of the headline.
 
 ```
-claude plugin marketplace add https://github.com/beCyborg/jadlis-start.git
-claude plugin install search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
-claude plugin install science-research@jadlis
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub
+claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
+claude plugin install jadlis-science-research@jadlis
 ```
 
-Order matters: `science-research` pulls `search` in as a dependency, but auto-installing a
-dependency never asks for keys — so you install `search` yourself, with the keys, first.
+Order matters: `jadlis-science-research` pulls `jadlis-search` in as a dependency, but
+auto-installing a dependency never asks for keys — so you install `jadlis-search` yourself, with
+the keys, first.
 
 ![One question fans out to the scientific databases, retracted and unverified papers are set aside, and the conclusions carry a strength-of-evidence level](docs/img/hero-jadlis-science-research.webp)
 
@@ -55,17 +56,18 @@ figure — the effect is then described in words.
 **a) Text to paste to an agent.** Copy the whole block into a Claude Code chat:
 
 ```
-You are an installer. Install the science-research plugin from the jadlis marketplace on this Mac.
+You are an installer. Install the jadlis-science-research plugin from the jadlis marketplace on this Mac.
 Run exactly these commands, verbatim, without shortening anything:
-1. claude plugin marketplace add https://github.com/beCyborg/jadlis-start.git
-2. claude plugin install search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
-3. claude plugin install science-research@jadlis
-4. claude plugin list — show me the lines for search and science-research and their versions.
-5. /search:keys — set up the scientific source keys: PubMed, Semantic Scholar, OpenAlex
+1. claude plugin marketplace add https://github.com/beCyborg/jadlis-hub
+2. claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
+3. claude plugin install jadlis-science-research@jadlis
+4. claude plugin list — show me the lines for jadlis-search and jadlis-science-research and their versions.
+5. /jadlis-search:keys — set up the scientific source keys: PubMed, Semantic Scholar, OpenAlex
    and the contact emails for Crossref and Unpaywall.
 Ask me for the Brave and Firecrawl values and substitute them for the ellipses yourself.
-Do not change the order: science-research pulls search in as a dependency, but auto-installing a
-dependency never asks for keys — so search is installed separately and with its keys.
+Do not change the order: jadlis-science-research pulls jadlis-search in as a dependency, but
+auto-installing a dependency never asks for keys — so jadlis-search is installed separately and
+with its keys.
 Show me each command in full and wait for a "yes" before running it. If I say "no", do not run it,
 tell me exactly what you skipped, and move on.
 If a command returns an error, stop, show me the output, and do not go to the next one.
@@ -75,15 +77,15 @@ Never print key values: report only "present" or "missing".
 **b) Commands by hand.**
 
 ```
-claude plugin marketplace add https://github.com/beCyborg/jadlis-start.git
-claude plugin install search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
-claude plugin install science-research@jadlis
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub
+claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
+claude plugin install jadlis-science-research@jadlis
 claude plugin list
 ```
 
 The first command installs nothing — it adds the marketplace. Only the second and third install
 anything, and it all comes off in one line:
-`claude plugin uninstall science-research@jadlis --keep-data`.
+`claude plugin uninstall jadlis-science-research@jadlis --keep-data`.
 
 **c) The short command.** Open Claude Code in the folder you work in and type:
 
@@ -108,24 +110,24 @@ states that in a line. The retraction check goes through Crossref — a retracti
 Crossref stays invisible. And it does not decide for you: the note comes out flagged as not
 reviewed by a human, and the review is yours.
 
-**What you need.** The `search` plugin with Brave and Firecrawl keys — installed first; Cochrane,
+**What you need.** The `jadlis-search` plugin with Brave and Firecrawl keys — installed first; Cochrane,
 the guidelines and Epistemonikos run on them. On top of that you need the scientific source keys —
 PubMed, Semantic Scholar, OpenAlex and contact emails for Crossref and Unpaywall: you enter them
-once with `/search:keys`, and the values go into the macOS Keychain. Without them some databases
+once with `/jadlis-search:keys`, and the values go into the macOS Keychain. Without them some databases
 drop to anonymous limits and answer intermittently. I do not retell other people's pricing: those
 bills are theirs. The notes folder is set at install time (`VAULT_PATH`, `~/Jadlis` by default) —
 the report lands in `Знания/Ресерчи`. With Obsidian closed, dedup and link insertion are skipped
 and the file is still written.
 
-Keys live in the macOS Keychain; whether this works on other systems — [to be confirmed].
+Keys live in the macOS Keychain; on Linux the same `security`-based helper does not exist, so
+Linux is untested.
 
 **How tokens get spent.** A heavy run — dozens of subagents out of your own quota: the databases,
 the citation chase, DOI checks in batches, synthesis, the critic and the edits. Several runs back
 to back do not fit in one window, so plan a scientific review as its own task for a session, not as
 a quick question on the side. What it costs in money I have not measured and will not name a figure.
 
-**Verified where I work:** my Mac, my subscription, my keys. Where else this works — [to be
-confirmed].
+**Verified where I work:** my Mac, my subscription, my keys. Verified on macOS only.
 
 **Terms of use.** There is no licence: all rights reserved by the author. You may read it and use
 it personally. Commercial use, republishing and inclusion in your own products — by arrangement
@@ -136,12 +138,12 @@ first command, you keep the version you installed.
 
 ```
 claude plugin marketplace update jadlis
-claude plugin update science-research@jadlis
+claude plugin update jadlis-science-research@jadlis
 claude plugin list
 ```
 
 Reinstall, if something ended up broken:
 
 ```
-claude plugin uninstall science-research@jadlis --keep-data && claude plugin install science-research@jadlis
+claude plugin uninstall jadlis-science-research@jadlis --keep-data && claude plugin install jadlis-science-research@jadlis
 ```

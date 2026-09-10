@@ -1,9 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
-  "name": "science-research",
-  "version": "1.0.1",
+  "name": "jadlis-science-research",
+  "version": "2.0.0",
   "displayName": "Jadlis — научный ресерч",
-  "description": "PubMed, Europe PMC, Semantic Scholar, OpenAlex, arXiv, Cochrane; снежный ком по цитированиям, проверка отзыва статьи, GRADE-синтез → заметка в vault. Требует плагин search (ключи Brave и Firecrawl).",
+  "description": "PubMed, Europe PMC, Semantic Scholar, OpenAlex, arXiv, Cochrane; снежный ком по цитированиям, проверка отзыва статьи, GRADE-синтез → заметка в vault. Требует плагин jadlis-search (ключи Brave и Firecrawl).",
   "author": {
     "name": "Be Cyborg"
   },
@@ -19,8 +19,8 @@
   ],
   "dependencies": [
     {
-      "name": "search",
-      "version": "^1"
+      "name": "jadlis-search",
+      "version": "^2"
     }
   ],
   "userConfig": {

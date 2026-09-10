@@ -6,7 +6,7 @@
 # research-объёмах бесплатно). НЕ добавляй reviews в маску бездумно (+$5/1000).
 #
 # ГЕЙТ (руки пользователя, ДО первого вызова): ключ GOOGLE_PLACES_API_KEY в Связке
-# ключей macOS (скилл /search:keys проводит по шагам; резолв — scripts/secret.sh)
+# ключей macOS (скилл /jadlis-search:keys проводит по шагам; резолв — scripts/secret.sh)
 # + бюджет-кап в Google Cloud Console — hard cap отсутствует by design, budget alert
 # отключает billing.
 set -uo pipefail
@@ -18,9 +18,9 @@ while [ $# -gt 0 ]; do case "$1" in
 [ -z "${GOOGLE_PLACES_API_KEY:-}" ] && \
   GOOGLE_PLACES_API_KEY=$(bash "$(cd "$(dirname "$0")" && pwd)/secret.sh" GOOGLE_PLACES_API_KEY 2>/dev/null || true)
 [ -z "${GOOGLE_PLACES_API_KEY:-}" ] && {
-  echo "PLACES_KEY_MISSING: GOOGLE_PLACES_API_KEY не найден ни в env, ни в Keychain (скилл /search:keys)." >&2
+  echo "PLACES_KEY_MISSING: GOOGLE_PLACES_API_KEY не найден ни в env, ни в Keychain (скилл /jadlis-search:keys)." >&2
   echo "Гейт пользователя: (1) ключ Google Cloud (Places API New), (2) бюджет-кап ДО первого вызова." >&2
-  echo "Фоллбэк для агента: mcp__plugin_search_brave-search__brave_place_search (country ОБЯЗАТЕЛЕН) — черновик, precision ниже." >&2
+  echo "Фоллбэк для агента: mcp__plugin_jadlis-search_brave-search__brave_place_search (country ОБЯЗАТЕЛЕН) — черновик, precision ниже." >&2
   exit 3; }
 MASK="places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.priceLevel,places.websiteUri,places.googleMapsUri,places.currentOpeningHours.openNow,places.primaryTypeDisplayName"
 curl -fsSL -X POST "https://places.googleapis.com/v1/places:searchText" \

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# secret.sh — единая точка чтения ключей ресерч-стека Jadlis (плагин search).
+# secret.sh — единая точка чтения ключей ресерч-стека Jadlis (плагин jadlis-search).
 #
 # Стандарт хранения: ключ вводится один раз и живёт в Связке ключей macOS (Keychain),
 # не в файлах репозитория и не в shell-профиле. Два класса:
@@ -7,7 +7,7 @@
 #       YOUTUBE_API_KEY). Пишет их Claude Code при включении плагина (userConfig,
 #       sensitive: true) в запись Keychain `Claude Code-credentials` → pluginSecrets.
 #   B — ключи скриптов и curl-блоков протоколов (научные источники, Exa, YC, Places,
-#       контактные почты). Пишет их скилл /search:keys как generic password:
+#       контактные почты). Пишет их скилл /jadlis-search:keys как generic password:
 #       service `jadlis`, account = имя ключа.
 #
 # ЗНАЧЕНИЯ КЛЮЧЕЙ НЕ ПЕЧАТАЮТСЯ НИГДЕ, КРОМЕ РЕЖИМОВ `KEY` И `--export`.
@@ -16,8 +16,8 @@ set -uo pipefail
 
 SERVICE="jadlis"
 SERVICE_LEGACY="jadlis-research"   # ключи, записанные до split 2026-09
-PLUGIN_ID_PREFIX="search@"
-PLUGIN_ID_DEFAULT="search@jadlis"
+PLUGIN_ID_PREFIX="jadlis-search@"
+PLUGIN_ID_DEFAULT="jadlis-search@jadlis"
 
 # Известные ключи для --list.
 KNOWN_KEYS_A="BRAVE_API_KEY FIRECRAWL_API_KEY REDDITAPIS_KEY YOUTUBE_API_KEY"
@@ -84,7 +84,7 @@ credential_services() {
 }
 
 # jq-выражение: достать $k из pluginSecrets — сперва по каноническому id
-# `search@jadlis`, затем по любому `search@<marketplace>`.
+# `jadlis-search@jadlis`, затем по любому `jadlis-search@<marketplace>`.
 PLUGIN_SECRET_JQ='
 (.pluginSecrets // {}) as $ps
 | ( $ps[$id][$k]?
@@ -212,7 +212,7 @@ list_group() {
 mode_list() {
   printf '  %-26s %-6s %s\n' "КЛЮЧ" "ДЛИНА" "ИСТОЧНИК"
   list_group "— класс A: MCP-серверы плагина (спрашивает Claude Code) —" "$KNOWN_KEYS_A"
-  list_group "— класс B: скрипты и curl-блоки (пишет /search:keys) —" "$KNOWN_KEYS_B"
+  list_group "— класс B: скрипты и curl-блоки (пишет /jadlis-search:keys) —" "$KNOWN_KEYS_B"
 }
 
 main() {

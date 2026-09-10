@@ -182,7 +182,7 @@ S2 search-агент (Fan-out) и citation-chasing (Snowball, `/citations` + `/r
    - Записать `{WORK_DIR}/s2.md` с `## S2 DEGRADED FALLBACK` заголовком
    - Выполнить:
    ```
-   mcp__plugin_search_brave-search__brave_web_search({
+   mcp__plugin_jadlis-search_brave-search__brave_web_search({
      query: "{REFINED_QUERY_EN} research paper peer-reviewed",
      count: 10,
      extra_snippets: true

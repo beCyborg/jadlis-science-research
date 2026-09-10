@@ -32,7 +32,7 @@ const PLUGIN_ROOT = A.pluginRoot || '.'
 const VAULT_PATH = A.vaultPath || ''
 
 // Воркер: пиннинг Opus 5 + effort high через субагента researcher-opus (как в full-research-core).
-const WORKER_OPTS = A.workerOpts || { agentType: 'science-research:researcher-opus' }
+const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-science-research:researcher-opus' }
 const w = extra => Object.assign({}, WORKER_OPTS, extra)
 
 // Синтез (synth) — единственная роль с реальным Fable-преимуществом (сборка отчёта
@@ -41,7 +41,7 @@ const w = extra => Object.assign({}, WORKER_OPTS, extra)
 // пиннят модель, effort high и allow-лист инструментов (у agent() нет опции allowedTools).
 // Имя аргумента остаётся `fableBridge` — один словарь на все восемь воркфлоу.
 const FABLE_SYNTH = A.fableBridge !== false
-const SYNTH_AGENT = FABLE_SYNTH ? 'science-research:synth-fable' : 'science-research:synth-opus'
+const SYNTH_AGENT = FABLE_SYNTH ? 'jadlis-science-research:synth-fable' : 'jadlis-science-research:synth-opus'
 // ai_model отчёта печатается по тому, что реально исполнилось, а не по догадке вызывающего.
 const AI_MODEL = FABLE_SYNTH ? 'claude-fable-5-1' : 'claude-opus-5'
 const AI_MODEL_RETRY = 'claude-opus-5'
@@ -775,7 +775,7 @@ let synthFellBack = false
 if (!synth && FABLE_SYNTH) {
   log('synth (Fable) вернул null — одна попытка на Opus 5.')
   synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL_RETRY),
-    synthOpts('synth→opus-retry', 'science-research:synth-opus'))
+    synthOpts('synth→opus-retry', 'jadlis-science-research:synth-opus'))
   synthFellBack = true
 }
 // Ранний выход обязателен: без него прогон молча уходит в Adversarial и возвращает
