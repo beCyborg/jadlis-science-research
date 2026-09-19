@@ -566,8 +566,8 @@ work_dir: "${WORK_DIR}"
 - ЧИСЛА ТОЛЬКО С LOCATOR: любое число в отчёте (N, размер эффекта, CI, p, доза, длительность) обязано иметь дословный locator — запись в numbersVerbatim[] соответствующего fulltext-файла (поля field/value/quote). Нет quote — числа в отчёте нет: пиши качественно («снижение умеренное»), без цифры. Цифры из абстрактов допустимы только если абстракт процитирован дословно в файле источника.
 - Видимая зона (до первого [!note]-) ≤140 строк.
 
-СОХРАНЕНИЕ: через Write сохрани draft в ${WORK_DIR}/report.md (НЕ в vault — запишет скилл).
-Верни по схеме SYNTH: reportPath="${WORK_DIR}/report.md", queryRu, mainConclusion, evidenceStrengthMax, gradeMax, retractedExcluded, relatedCandidates (3-6 ключевых слов), gaps, keyDois (DOI ключевых статей выводов — для recheck критиком).
+СОХРАНЕНИЕ: через Write сохрани draft в ${WORK_DIR}/draft.md (НЕ в vault — запишет скилл).
+Верни по схеме SYNTH: reportPath="${WORK_DIR}/draft.md", queryRu, mainConclusion, evidenceStrengthMax, gradeMax, retractedExcluded, relatedCandidates (3-6 ключевых слов), gaps, keyDois (DOI ключевых статей выводов — для recheck критиком).
 НЕ спавни субагентов, читай только файлы в ${WORK_DIR} и указанные референсы.`
 }
 
@@ -784,7 +784,8 @@ if (!synth) {
   log('Синтез не удался дважды. Материалы собраны, отчёт не написан.')
   return { workDir: WORK_DIR, status: 'synthesis-failed', papersTotal: allPapers.length }
 }
-const reportPath = synth.reportPath || `${WORK_DIR}/report.md`
+// draft.md, not report.md: CC 2.1.276+ blocks subagent Write to ^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$
+const reportPath = synth.reportPath || `${WORK_DIR}/draft.md`
 const aiModelActual = (FABLE_SYNTH && !synthFellBack) ? 'claude-fable-5-1' : 'claude-opus-5'
 log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthMax}, GRADE_max=${synth?.gradeMax}, модель=${aiModelActual}.`)
 
