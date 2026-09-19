@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-09-19
+
+### Для человека
+
+- Научный ресёрч снова сам сохраняет отчёт. Claude Code с версии 2.1.276 запрещает субагентам писать файлы с именем
+  `report*.md`; черновик теперь называется `draft.md`.
+
+### For agents
+
+- SYNTH draft `${WORK_DIR}/report.md` → `${WORK_DIR}/draft.md` (CC 2.1.276+ blocks subagent Write to
+  `^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$`, errorCode 5); `reportPath` contract unchanged.
+- `tests/test_sp_workdir_names.py` guards every `${WORK_DIR}/…` name in `workflows/*.js`; gotcha added.
+
 ## [2.0.0] — 2026-09-10
 
 ### Для человека
