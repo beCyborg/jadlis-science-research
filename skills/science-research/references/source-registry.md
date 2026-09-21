@@ -1,6 +1,6 @@
 # Source Registry
 
-**Версия:** v5.2 (10 search + 3 enrichment; ядро `search-paper-core`)
+**Версия:** v5.3 (10 search + 3 enrichment; ядро `search-paper-core`)
 **Дата:** 2026-09-21
 
 > Источники оркеструются workflow-ядром `search-paper-core` (Fan-out фаза). Skip по дисциплине и осмысленности делает query-builder (`SEARCH_PLAN.skip`) + JS-фильтр `defaultSources()`. Snowball-фаза добавляет статьи через OpenAlex/S2 `/citations`+`/references` (citation-chasing).
@@ -11,18 +11,25 @@
 
 ### Search sources (Fan-out — параллельные агенты)
 
-| Source ID | Prefix | Primary Tool | Fallback | Default Limit | Skip Condition |
+| Source ID | Prefix | Primary Tool | Fallback | Limit | Skip Condition |
 |-----------|--------|-------------|----------|---------------|----------------|
-| pubmed | `[pm*]` | REST: `eutils.ncbi.nlm.nih.gov` (esearch + efetch) | **Limited: 1 Brave call after retry fails** | 20 | — |
-| europe-pmc | `[em*]` | REST: `ebi.ac.uk/europepmc/webservices/rest/search` | **Limited: 1 Brave call after retry fails** | 20 | — |
-| s2 | `[s2*]` | REST: `api.semanticscholar.org/graph/v1/paper/search` | **Brave fallback (degraded)** | 20 | — |
-| openalex | `[oa*]` | REST: `api.openalex.org/works?search=` | **No Brave fallback (FWCI unavailable)** | 20 | — |
-| arxiv | `[ax*]` | REST: `export.arxiv.org/api/query` | **No Brave fallback (retry only)** | 20 | discipline=biomedical AND no "preprint" |
-| cochrane-guidelines | `[co*]` | Brave + Goggles: `$site=cochranelibrary.com` + `$site=uptodate.com` + `$site=nice.org.uk` | — (Brave IS primary) | 10 | discipline=cs,physics; GUIDELINES=false |
-| web-experts | `[w*]` | Brave + Goggles: `$site=` domains list | — (Brave IS primary) | 10 | — |
-| epistemonikos | `[ep*]` | firecrawl scrape: `epistemonikos.org/search` (SR-база) | **Brave `$site=epistemonikos.org`** | 8 | discipline=cs,physics; GUIDELINES=false |
-| clinicaltrials | `[ct*]` | REST v2: `clinicaltrials.gov/api/v2/studies` | **No Brave fallback (retry only)** | 20 | discipline=cs,physics |
-| core | `[cr*]` | REST v3: `api.core.ac.uk/v3/search/works/` (слэш на конце обязателен, `curl -sL`) | **No Brave fallback (retry only)** | 20 | — (включён для всех дисциплин) |
+| pubmed | `[pm*]` | REST: `eutils.ncbi.nlm.nih.gov` (esearch + efetch) | **Limited: 1 Brave call after retry fails** | {LIMIT} = 40 | — |
+| europe-pmc | `[em*]` | REST: `ebi.ac.uk/europepmc/webservices/rest/search` | **Limited: 1 Brave call after retry fails** | {LIMIT} = 40 | — |
+| s2 | `[s2*]` | REST: `api.semanticscholar.org/graph/v1/paper/search` | **Brave fallback (degraded)** | {LIMIT} = 40 | — |
+| openalex | `[oa*]` | REST: `api.openalex.org/works?search=` | **No Brave fallback (FWCI unavailable)** | {LIMIT} = 40 | — |
+| arxiv | `[ax*]` | REST: `export.arxiv.org/api/query` | **No Brave fallback (retry only)** | {LIMIT} = 40 | discipline=biomedical AND no "preprint" |
+| cochrane-guidelines | `[co*]` | Brave + Goggles: `$site=cochranelibrary.com` + `$site=uptodate.com` + `$site=nice.org.uk` | — (Brave IS primary) | своё `count` протокола | discipline=cs,physics; GUIDELINES=false |
+| web-experts | `[w*]` | Brave + Goggles: `$site=` domains list | — (Brave IS primary) | своё `count` протокола | — |
+| epistemonikos | `[ep*]` | firecrawl scrape: `epistemonikos.org/search` (SR-база) | **Brave `$site=epistemonikos.org`** | своё `count` протокола | discipline=cs,physics; GUIDELINES=false |
+| clinicaltrials | `[ct*]` | REST v2: `clinicaltrials.gov/api/v2/studies` | **No Brave fallback (retry only)** | {LIMIT} = 40 | discipline=cs,physics |
+| core | `[cr*]` | REST v3: `api.core.ac.uk/v3/search/works/` (слэш на конце обязателен, `curl -sL`) | **No Brave fallback (retry only)** | {LIMIT} = 40 | — (включён для всех дисциплин) |
+
+> **Колонка Limit.** Число задаёт ядро в промпте агента (`PER_SOURCE_TOP`, дефолт **40** с 2.2.0,
+> переопределяется аргументом `perSourceTop`) — дефолты протоколов игнорируются. Brave-каналы
+> (Cochrane, web-experts, Epistemonikos) берут столько, сколько прописано в их собственном протоколе.
+> Источникам pubmed / europepmc / openalex ядро передаёт основной запрос **и короткие запросы по
+> подтемам**; все они исполняются одним вызовом `source-fetch.py --queries-file`, бюджет на запрос —
+> `max(8, LIMIT / число запросов)`.
 
 > **CORE — серая литература, а не ещё одна журнальная база.** Диссертации, отчёты, рабочие бумаги,
 > репозиторные OA-копии: то, чего нет в PubMed/S2/OpenAlex, и антидот publication bias.

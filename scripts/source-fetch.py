@@ -11,16 +11,27 @@ re-reading a 70-100k-token context on every turn. The same move in the snowball 
 (scripts/chase.py) took chase agents from 24-34 turns to 6-7.
 
 Usage:
-  source-fetch.py <source> --query "<native query string>" [--limit 30] [--year-from YYYY]
+  source-fetch.py <source> --query "<native query string>" [--query "<second>" …]
+                  [--queries-file queries.json] [--limit 30] [--year-from YYYY]
                   [--preprints] [--out path]
+
+Several queries in ONE invocation: the main query of the source plus one short query per
+subquestion the main query does not carry (the query-builder emits them, see SEARCH_PLAN
+in workflows/search-paper-core.js). The agent must never call this script once per query —
+the whole point is one Bash turn for the whole source. Per-query budget is
+`max(8, limit // n_queries)`; results are deduped across queries in arrival order, so the
+main query keeps its ranking and the extra queries only add what it missed.
 
 Output JSON:
   {source, apiStatus: "ok"|"empty"|"unavailable", total, passes:[{name, requested, returned}],
+   queries:[{index, query, limit, apiStatus, total, returned, kept, note}],
    truncated, remaining, note,
    papers:[{title, doi, pmid, externalId, year, pubTypes, citations, influentialCitations, fwci,
-            isOA, oaUrl, abstract, pass, preprint?}]}
+            isOA, oaUrl, abstract, pass, queryIndex, preprint?}]}
 A field the API did not return is null — identifiers are never invented.
-Exit 0 for ok/empty, 2 for unavailable (the agent then goes to the protocol's documented fallback).
+Exit 0 for ok/empty, 2 for unavailable (the agent then goes to the protocol's documented
+fallback). With several queries `unavailable` means EVERY query failed: one dead extra query
+never sinks the main one.
 
 Keys (from env, put there by scripts/secret.sh --export): PUBMED_API_KEY, PUBMED_EMAIL,
 OPENALEX_API_KEY, SEMANTIC_SCHOLAR_API_KEY, CORE_API_KEY. Key values are never printed.
@@ -50,6 +61,13 @@ CTGOV = "https://clinicaltrials.gov/api/v2/studies"
 # PubMed evidence-type pass: 13 hits vs 5 for the unfiltered query on the 2026-09-21 measurement
 PT_FILTER = ("(randomized controlled trial[pt] OR meta-analysis[pt] OR systematic review[pt] "
              "OR clinical trial[pt] OR guideline[pt] OR practice guideline[pt])")
+# PubMed observational pass (added 2026-09-21): the evidence filter above took 2/3 of the slots and
+# cohorts fought for the remaining third — Kimblad 2022 (sperm) landed 19th with 10 slots, Carlsson
+# 2017 (diabetes) 79th, both present in the result set. `observational study[pt]` alone is too young
+# a tag (assigned from 2014), so the study-design MeSH headings ride along.
+OBS_FILTER = ("(observational study[pt] OR cohort studies[mh] OR case-control studies[mh] "
+              "OR cross-sectional studies[mh] OR prospective studies[mh] "
+              "OR longitudinal studies[mh] OR follow-up studies[mh])")
 
 
 # ── pure helpers (unit-tested in tests/test_sp_source_fetch.py) ──────────────────────────────────
@@ -263,17 +281,61 @@ def third(limit):
     return max(1, int(round(limit / 3.0)))
 
 
+def quarter(limit):
+    return max(1, int(round(limit / 4.0)))
+
+
+def pubmed_quotas(limit):
+    """evidence : observational : general = 1/2 : 1/4 : 1/4 of LIMIT (was 2/3 : — : 1/3).
+    Returns (evidence, observational, general), each ≥1 and summing to `limit` for limit ≥ 4."""
+    obs = quarter(limit)
+    gen = quarter(limit)
+    return max(1, limit - obs - gen), obs, gen
+
+
+def per_query_limit(limit, n_queries):
+    """Budget of one query when several run in the same invocation. The floor of 8 keeps a narrow
+    subquestion query useful: below that a single review plus its companions eat the whole slot."""
+    if n_queries <= 1:
+        return limit
+    return max(8, limit // n_queries)
+
+
+def load_queries(query_args, queries_file):
+    """CLI queries → an ordered, deduped list. `--queries-file` is a JSON list of strings or of
+    objects with a "query" key (the shape the query-builder writes); repeated `--query` wins the
+    first positions, so the source's MAIN query stays first and keeps its ranking after dedup."""
+    out = []
+    for q in list(query_args or []):
+        q = (q or "").strip()
+        if q and q not in out:
+            out.append(q)
+    if queries_file:
+        with open(queries_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            data = data.get("queries") or []
+        for item in data or []:
+            q = item.get("query") if isinstance(item, dict) else item
+            q = (q or "").strip()
+            if q and q not in out:
+                out.append(q)
+    return out
+
+
 # ── sources ──────────────────────────────────────────────────────────────────────────────────────
 
 def fetch_pubmed(a):
-    """Two passes (evidence-type at 2/3 of LIMIT + general at 1/3), `sort=relevance` always,
-    then efetch for abstracts, publication types, year and DOI."""
+    """Three passes (evidence-type 1/2 of LIMIT, observational 1/4, general 1/4), `sort=relevance`
+    always, then efetch for abstracts, publication types, year and DOI."""
     key, email = os.environ.get("PUBMED_API_KEY", ""), os.environ.get("PUBMED_EMAIL", "")
     base = a.query
     if a.year_from:
         base = "(%s) AND %d:%d[dp]" % (base, a.year_from, THIS_YEAR)
-    plan = [("evidence", "(%s) AND %s" % (base, PT_FILTER), max(1, a.limit - third(a.limit))),
-            ("general", base, third(a.limit))]
+    ev, obs, gen = pubmed_quotas(a.limit)
+    plan = [("evidence", "(%s) AND %s" % (base, PT_FILTER), ev),
+            ("observational", "(%s) AND %s" % (base, OBS_FILTER), obs),
+            ("general", base, gen)]
 
     ids_by_pass, counts, passes, failures = [], {}, [], 0
     for name, term, retmax in plan:
@@ -327,7 +389,8 @@ def fetch_pubmed(a):
     for p, src in zip(merged_passes, passes):
         p["requested"] = src["requested"]
     total = counts.get("general")
-    note = (note + " | " if note else "") + "evidence-pass hits: %s" % counts.get("evidence")
+    note = (note + " | " if note else "") + "pass hits: evidence %s, observational %s" % (
+        counts.get("evidence"), counts.get("observational"))
     status = "ok" if papers else "empty"
     return envelope("pubmed", status, papers, total, merged_passes, note=note), 0
 
@@ -588,23 +651,88 @@ SOURCES = {
 }
 
 
+def run_queries(source, a, queries):
+    """Run every query of one source in this single invocation and merge the results.
+
+    Dedup is by `paper_key` in arrival order: the main query (index 0) keeps its ranking, an extra
+    subquestion query contributes only what the main one missed. `total` and `remaining` stay those
+    of the main query — they describe the source's own hit count, not the union."""
+    n = len(queries)
+    per = per_query_limit(a.limit, n)
+    seen, merged, per_query, passes = set(), [], [], []
+    main_total, remaining, statuses, notes = None, None, [], []
+    src_name = source  # the fetcher's own label ("europe-pmc" ≠ the subcommand "europepmc")
+    for i, q in enumerate(queries):
+        sub = argparse.Namespace(**vars(a))
+        sub.query = q
+        sub.limit = per
+        env, _code = SOURCES[source](sub)
+        kept = 0
+        for p in env.get("papers") or []:
+            k = paper_key(p)
+            if k in seen:
+                continue
+            seen.add(k)
+            rec = dict(p)
+            rec["queryIndex"] = i
+            merged.append(rec)
+            kept += 1
+        per_query.append({
+            "index": i, "query": q, "limit": per, "apiStatus": env.get("apiStatus"),
+            "total": env.get("total"), "returned": len(env.get("papers") or []), "kept": kept,
+            "note": env.get("note") or "",
+        })
+        statuses.append(env.get("apiStatus"))
+        for row in env.get("passes") or []:
+            passes.append(dict(row, query=i))
+        if i == 0:
+            main_total, remaining = env.get("total"), env.get("remaining")
+            src_name = env.get("source") or source
+        if env.get("note"):
+            notes.append("q%d: %s" % (i, env["note"]))
+
+    if all(s == "unavailable" for s in statuses):
+        out = envelope(src_name, "unavailable", note="; ".join(notes) or "every query failed")
+        out["queries"] = per_query
+        return out, 2
+    status = "ok" if merged else "empty"
+    if n > 1:
+        notes.append("%d queries × %d each → %d unique" % (n, per, len(merged)))
+    out = envelope(src_name, status, merged, main_total, passes, remaining=remaining,
+                   note="; ".join(notes))
+    out["queries"] = per_query
+    return out, 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("source", choices=sorted(SOURCES))
-    ap.add_argument("--query", required=True, help="native query string for this source, as the protocol writes it")
+    ap.add_argument("--query", action="append", default=[], dest="query_list",
+                    help="native query string for this source; repeat for subquestion queries "
+                         "(first one is the main query and keeps its ranking)")
+    ap.add_argument("--queries-file", default=None, dest="queries_file",
+                    help="JSON list of query strings (or of objects with a \"query\" key), "
+                         "appended after the --query ones")
     ap.add_argument("--limit", type=int, default=30)
     ap.add_argument("--year-from", type=int, default=None, dest="year_from")
     ap.add_argument("--preprints", action="store_true", help="Europe PMC only: an extra SRC:PPR pass on top of LIMIT")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
-    out, code = SOURCES[a.source](a)
+    queries = load_queries(a.query_list, a.queries_file)
+    if not queries:
+        ap.error("at least one --query or a non-empty --queries-file is required")
+    a.query = queries[0]  # the fetchers read `a.query`; run_queries overrides it per query
+
+    out, code = run_queries(a.source, a, queries)
     text = json.dumps(out, ensure_ascii=False, indent=1)
     if a.out:
         with open(a.out, "w", encoding="utf-8") as f:
             f.write(text)
         summary = dict((k, v) for k, v in out.items() if k != "papers")
         summary["papers"] = len(out["papers"])
+        summary["queries"] = [dict((k, v) for k, v in q.items() if k != "note")
+                              for q in out.get("queries") or []]
         summary["withAbstract"] = sum(1 for p in out["papers"] if p.get("abstract"))
         summary["withDoi"] = sum(1 for p in out["papers"] if p.get("doi"))
         summary["out"] = a.out

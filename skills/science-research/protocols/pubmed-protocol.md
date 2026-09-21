@@ -13,10 +13,22 @@ eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export PUBMED_API_KEY PUBMED_EM
 python3 "{PLUGIN_ROOT}/scripts/source-fetch.py" pubmed --query '{REFINED_QUERY_EN}' --limit {LIMIT} --out "{WORK_DIR}/_fetch_pubmed.json"
 ```
 
-Скрипт делает ровно то, что описано ниже руками: `sort=relevance`, два прохода (доказательный
-с `[pt]`-фильтром на две трети LIMIT + общий на треть), слияние и дедуп, затем efetch за
-аннотациями, типами публикаций, годом и DOI. Ключи — из env (`tool=search-paper`, `email`,
-`api_key`), 10 RPS соблюдены.
+Скрипт делает ровно то, что описано ниже руками: `sort=relevance`, **три прохода** (доказательный
+с `[pt]`-фильтром на половину LIMIT + наблюдательный на четверть + общий на четверть), слияние и
+дедуп, затем efetch за аннотациями, типами публикаций, годом и DOI. Ключи — из env
+(`tool=search-paper`, `email`, `api_key`), 10 RPS соблюдены.
+
+**Несколько запросов за один вызов.** Ядро даёт источнику основной запрос плюс короткие запросы по
+подтемам. Все они исполняются ОДНИМ вызовом — иначе каждый запрос стоит отдельного хода агента:
+
+```bash
+python3 "{PLUGIN_ROOT}/scripts/source-fetch.py" pubmed --queries-file "{WORK_DIR}/_queries_pubmed.json" --limit {LIMIT} --out "{WORK_DIR}/_fetch_pubmed.json"
+```
+
+Файл — JSON-список строк, первая = основной запрос (за ним остаётся ранжирование при дедупе).
+Бюджет на запрос — `max(8, LIMIT / число запросов)`; в выводе появляется `queries[]` с `total` и
+`kept` по каждому, у статьи — `queryIndex`. Статью, пришедшую доп. запросом, не выбрасывай за то,
+что её нет в основном: она и есть добор по подтеме.
 
 В stdout — одна строка сводки, в `--out` — JSON:
 `{source, apiStatus, total, passes[], truncated, remaining, note, papers[]}`;
@@ -60,13 +72,20 @@ curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&te
 > двух систематических обзоров, 88 работ): тот же `[tiab]`-запрос по дате — 0 попаданий в TOP-50,
 > по релевантности — 5.
 >
-> **Два прохода, результаты слить и дедуплицировать до TOP-{LIMIT}:**
+> **Три прохода, результаты слить и дедуплицировать до TOP-{LIMIT}:**
 > 1. **Доказательный** — строка запроса + `AND (randomized controlled trial[pt] OR meta-analysis[pt]
 >    OR systematic review[pt] OR clinical trial[pt] OR guideline[pt] OR practice guideline[pt])`,
->    `retmax` = две трети LIMIT. В том же замере: 7/11/13 попаданий в TOP-20/30/50 против 2/4/5
+>    `retmax` = **половина** LIMIT. В том же замере: 7/11/13 попаданий в TOP-20/30/50 против 2/4/5
 >    у запроса без фильтра типов; на второй теме (формы железа) — 3 против 2.
-> 2. **Общий** — строка запроса как есть, `retmax` = треть LIMIT: наблюдательные исследования,
->    механистика и свежие работы, которым тип публикации ещё не проставлен.
+> 2. **Наблюдательный** — строка запроса + `AND (observational study[pt] OR cohort studies[mh] OR
+>    case-control studies[mh] OR cross-sectional studies[mh] OR prospective studies[mh] OR
+>    longitudinal studies[mh] OR follow-up studies[mh])`, `retmax` = **четверть** LIMIT.
+>    Добавлен 21.09.2026: раньше доказательный проход забирал две трети мест, и когорты бились за
+>    оставшуюся треть — Kimblad 2022 (сперма) оказался 19-м при 10 слотах, Carlsson 2017 (диабет)
+>    79-м, хотя обе работы были в выдаче. `observational study[pt]` проставляют только с 2014 года,
+>    поэтому рядом идут MeSH-заголовки дизайна.
+> 3. **Общий** — строка запроса как есть, `retmax` = **четверть** LIMIT: механистика и свежие
+>    работы, которым тип публикации ещё не проставлен.
 >
 > Термины концептов — с `[tiab]` (плюс `[mh]` для MeSH): широкая ветка `OR "…"[mh]` без `[tiab]`
 > на основном концепте размывает выдачу (762 записи и 0 попаданий в TOP-50 против 262 и 5).
