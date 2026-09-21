@@ -17,7 +17,44 @@ ClinicalTrials.gov — реестр клинических испытаний. �
 
 ---
 
+## Primary: скрипт (начни отсюда)
+
+```bash
+python3 "{PLUGIN_ROOT}/scripts/source-fetch.py" clinicaltrials --query '{REFINED_QUERY_EN}' --limit {LIMIT} --out "{WORK_DIR}/_fetch_clinicaltrials.json"
+```
+
+Ключа у ClinicalTrials.gov нет, прелюд `secret.sh` не нужен.
+
+Скрипт: `/api/v2/studies?query.term=…&pageSize={LIMIT}&countTotal=true&sort=LastUpdatePostDate:desc`
+и нормализация записи реестра в схему PAPER: `nctId` → `externalId`, `enrollmentInfo.count` →
+`sampleN`, conditions/interventions/primary outcome/status сворачиваются в короткую строку
+`abstract`, ссылка с `type=RESULT` → `pmid`.
+
+В stdout — одна строка сводки, в `--out` — JSON:
+`{source, apiStatus, total (totalCount), passes[], truncated, remaining, note, papers[]}`;
+в `papers[]` — `title, externalId` (NCT), `pmid` (если результаты опубликованы), `year`
+(**дата первичного завершения**; у набирающего испытания она в будущем — год старта лежит рядом
+в `startYear`), `pubTypes[]` (studyType + фазы), `status`, `phase`, `sampleN`, `resultsPosted`,
+`abstract`, `pass`. `doi`, `citations`, `influentialCitations`, `fwci` — `null`: у записи реестра
+их нет, и выдумывать их нельзя.
+
+`studyType` в дампе — `clinical-trial-record` (см. маппинг ниже), `qualitySignals` —
+`pre-registered` + `results-posted` / `no-results-posted` (флаг publication bias) + фаза.
+
+**Правило:** `exit 2` / `apiStatus=unavailable` → ручной путь ниже и его обработка ошибок
+(Brave-фоллбэка нет — пишем `## ClinicalTrials UNAVAILABLE`); иначе ручные `curl` НЕ нужны.
+
+**Бюджет ходов: 5–8 на источник** — запустить скрипт → Read JSON → оценить релевантность и
+отранжировать до TOP-{LIMIT} → Write дамп → вернуть ответ по схеме. Если первый проход явно мимо
+темы или почти пуст, можно запустить скрипт ещё раз с уточнённой строкой запроса, но **не более
+3 запусков скрипта суммарно**.
+
+---
+
 ## Primary: REST API v2 (без ключа)
+
+> Ручной путь — референс и фоллбэк. Нужен, только если скрипт вернул `exit 2`.
+> Запрос одной записи (`/studies/{NCT_ID}`) скриптом не покрыт — он ниже.
 
 **Base:** `https://clinicaltrials.gov/api/v2/studies`
 

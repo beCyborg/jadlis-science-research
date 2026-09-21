@@ -1,7 +1,7 @@
 # Source Registry
 
-**Версия:** v5.1 (9 search + 3 enrichment; ядро `search-paper-core`)
-**Дата:** 2026-09-01
+**Версия:** v5.2 (10 search + 3 enrichment; ядро `search-paper-core`)
+**Дата:** 2026-09-21
 
 > Источники оркеструются workflow-ядром `search-paper-core` (Fan-out фаза). Skip по дисциплине и осмысленности делает query-builder (`SEARCH_PLAN.skip`) + JS-фильтр `defaultSources()`. Snowball-фаза добавляет статьи через OpenAlex/S2 `/citations`+`/references` (citation-chasing).
 
@@ -22,12 +22,29 @@
 | web-experts | `[w*]` | Brave + Goggles: `$site=` domains list | — (Brave IS primary) | 10 | — |
 | epistemonikos | `[ep*]` | firecrawl scrape: `epistemonikos.org/search` (SR-база) | **Brave `$site=epistemonikos.org`** | 8 | discipline=cs,physics; GUIDELINES=false |
 | clinicaltrials | `[ct*]` | REST v2: `clinicaltrials.gov/api/v2/studies` | **No Brave fallback (retry only)** | 20 | discipline=cs,physics |
+| core | `[cr*]` | REST v3: `api.core.ac.uk/v3/search/works/` (слэш на конце обязателен, `curl -sL`) | **No Brave fallback (retry only)** | 20 | — (включён для всех дисциплин) |
+
+> **CORE — серая литература, а не ещё одна журнальная база.** Диссертации, отчёты, рабочие бумаги,
+> репозиторные OA-копии: то, чего нет в PubMed/S2/OpenAlex, и антидот publication bias.
+> Префикс `cr`, потому что `co` занят Cochrane. Две ловушки: (1) без слэша на конце — 301 и
+> HTML редиректа вместо JSON; (2) в ответе поиска приходит поле `fullText` на 80–180 тыс. символов
+> на запись — вырезать через `jq 'del(.results[].fullText)'` ДО чтения, иначе контекст агента
+> затапливает. `doi` бывает `null` (репозиторные работы), `downloadUrl` — прямая ссылка на PDF.
+> Тот же поиск по DOI (`q=doi:"{DOI}"`) — запасной OA-локус для fulltext-фазы.
+
+### Препринты
+
+Отдельного источника под bioRxiv/medRxiv нет: их API отдаёт только выгрузку по диапазону дат, поиска по
+ключевым словам у него нет. Канал препринтов в биомедицине — второй подзапрос Europe PMC с `SRC:PPR`
+(до 10 записей **сверх** LIMIT, отдельная секция дампа, `qualitySignals: preprint`).
+CS/physics-препринты приходят через arXiv, как и раньше.
 
 ### Enrichment sources (Phase 4)
 
 | Source ID | Purpose | Primary Tool | Fallback |
 |-----------|---------|-------------|----------|
-| crossref | DOI verify + retraction check + funder + license | REST: `api.crossref.org/works/{DOI}?mailto=` | **Retry with ?mailto= + 429 backoff** |
+| crossref | DOI verify + retraction check (4 сигнала) + anti-hallucination (title/year/author) + funder + license | REST: `api.crossref.org/works/{DOI}?mailto=` + list-запрос `works?filter=updates:{DOI},update-type:retraction` для топ-тира | **Retry with ?mailto= + 429 backoff** |
+| opencitations | Третья ступень citation-chasing, когда отказали и OpenAlex, и S2 | REST v2 без ключа: `api.opencitations.net/index/v2/{citations,references}/doi:{DOI}` | **Метаданных не даёт — гидрация DOI пакетом через Crossref/OpenAlex** |
 | unpaywall | OA PDF URL + OA status | REST: `api.unpaywall.org/v2/{DOI}?email=` | **Retry only** |
 | fulltext | Per-paper structured extraction (top-3 OA) | OA-страница (HTML) → `defuddle parse` + Read; **OA/arXiv = PDF-URL → `bash {PLUGIN_ROOT}/scripts/pdf-fetch.sh "<url>"` → Read (0 кр)** | Skip if no OA |
 
@@ -51,10 +68,11 @@ science.org/blogs/pipeline
 |---------|-----------------|---------|
 | PubMed (NCBI) | https://www.ncbi.nlm.nih.gov/account/settings/ | `PUBMED_API_KEY`, `PUBMED_EMAIL` |
 | Semantic Scholar | https://www.semanticscholar.org/product/api | `SEMANTIC_SCHOLAR_API_KEY` |
-| OpenAlex | https://openalex.org (freemium dashboard) | `OPENALEX_API_KEY`, `OPENALEX_MAILTO` |
+| OpenAlex | https://openalex.org (freemium dashboard) | `OPENALEX_API_KEY` (обязателен: `&api_key=`; `OPENALEX_MAILTO` — только контакт, на лимиты не влияет) |
 | Crossref | polite pool по `mailto=` в URL, регистрация не нужна | `CROSSREF_MAILTO` |
 | Unpaywall | по `email=` в URL, регистрация не нужна | `UNPAYWALL_EMAIL` |
-| CORE | https://core.ac.uk/services/api (будущее расширение) | `CORE_API_KEY` |
+| CORE | https://core.ac.uk/services/api (ключ обязателен: `Authorization: Bearer`) | `CORE_API_KEY` |
+| OpenCitations | ключ не нужен, регистрация не нужна | — |
 
 ---
 
@@ -66,6 +84,11 @@ Pipeline требует **минимум 2 search sources** с результа�
 
 ## Добавление нового источника
 
-1. Создать `protocols/{id}-protocol.md`
-2. Добавить строку в таблицу выше
-3. Добавить case в SKILL.md Phase 3 agent dispatch
+1. Создать `protocols/{id}-protocol.md` (структура — как у соседей).
+2. Добавить строку в таблицу выше.
+3. Прописать источник в `workflows/search-paper-core.js`: `ALL_SOURCES` (уникальный `prefix`!),
+   массив `base` в `defaultSources()` + условие skip по дисциплине, `SEARCH_PLAN.queries`
+   (свойство **и** `required[]`), подсказка по синтаксису запроса в `queryPrompt()`.
+4. Обновить счётчики источников: `meta.phases` Fan-out, шапка этого файла, SKILL.md, README.
+5. `uv run --with pytest pytest tests/ -q` — `tests/test_sp_sources_registry.py` проверяет
+   наличие файла протокола, уникальность префиксов и полноту `SEARCH_PLAN.queries`.

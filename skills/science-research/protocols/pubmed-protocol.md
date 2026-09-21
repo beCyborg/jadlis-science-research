@@ -6,7 +6,38 @@
 
 ---
 
+## Primary: скрипт (начни отсюда)
+
+```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export PUBMED_API_KEY PUBMED_EMAIL)"
+python3 "{PLUGIN_ROOT}/scripts/source-fetch.py" pubmed --query '{REFINED_QUERY_EN}' --limit {LIMIT} --out "{WORK_DIR}/_fetch_pubmed.json"
+```
+
+Скрипт делает ровно то, что описано ниже руками: `sort=relevance`, два прохода (доказательный
+с `[pt]`-фильтром на две трети LIMIT + общий на треть), слияние и дедуп, затем efetch за
+аннотациями, типами публикаций, годом и DOI. Ключи — из env (`tool=search-paper`, `email`,
+`api_key`), 10 RPS соблюдены.
+
+В stdout — одна строка сводки, в `--out` — JSON:
+`{source, apiStatus, total, passes[], truncated, remaining, note, papers[]}`;
+в `papers[]` — `title, doi` (нормализованный, нижний регистр, без `https://doi.org/`), `pmid,
+externalId, year, pubTypes[], citations, influentialCitations, fwci, isOA, oaUrl, abstract`
+(≤1500 знаков), `pass` (каким проходом пришла статья). Чего API не отдал — `null`;
+идентификаторы не выдумываются.
+
+**Правило:** `exit 2` / `apiStatus=unavailable` → ручной путь ниже и его фоллбэк;
+иначе ручные `curl` НЕ нужны.
+
+**Бюджет ходов: 5–8 на источник** — запустить скрипт → Read JSON → оценить релевантность и
+отранжировать до TOP-{LIMIT} → Write дамп → вернуть ответ по схеме. Если первый проход явно мимо
+темы или почти пуст, можно запустить скрипт ещё раз с уточнённой строкой запроса, но **не более
+3 запусков скрипта суммарно**.
+
+---
+
 ## Primary: REST E-utilities
+
+> Ручной путь — референс и фоллбэк. Нужен, только если скрипт вернул `exit 2`.
 
 ### NCBI Registration Preflight
 
@@ -19,10 +50,26 @@ E-utilities требуют `tool` и `email` для восстановления
 
 ```bash
 eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export PUBMED_API_KEY PUBMED_EMAIL)"
-curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={REFINED_QUERY_EN}&retmax={LIMIT}&api_key=${PUBMED_API_KEY}&tool=search-paper&email=${PUBMED_EMAIL}&retmode=json"
+curl -s "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={REFINED_QUERY_EN}&retmax={LIMIT}&sort=relevance&api_key=${PUBMED_API_KEY}&tool=search-paper&email=${PUBMED_EMAIL}&retmode=json"
 ```
 
 Из JSON ответа: `esearchresult.idlist` → массив PMIDs.
+
+> **`sort=relevance` обязателен.** Без параметра esearch отдаёт самые свежие записи, а не самые
+> подходящие. Замер 21.09.2026 (тема «melatonin + delayed sleep phase», эталон — списки литературы
+> двух систематических обзоров, 88 работ): тот же `[tiab]`-запрос по дате — 0 попаданий в TOP-50,
+> по релевантности — 5.
+>
+> **Два прохода, результаты слить и дедуплицировать до TOP-{LIMIT}:**
+> 1. **Доказательный** — строка запроса + `AND (randomized controlled trial[pt] OR meta-analysis[pt]
+>    OR systematic review[pt] OR clinical trial[pt] OR guideline[pt] OR practice guideline[pt])`,
+>    `retmax` = две трети LIMIT. В том же замере: 7/11/13 попаданий в TOP-20/30/50 против 2/4/5
+>    у запроса без фильтра типов; на второй теме (формы железа) — 3 против 2.
+> 2. **Общий** — строка запроса как есть, `retmax` = треть LIMIT: наблюдательные исследования,
+>    механистика и свежие работы, которым тип публикации ещё не проставлен.
+>
+> Термины концептов — с `[tiab]` (плюс `[mh]` для MeSH): широкая ветка `OR "…"[mh]` без `[tiab]`
+> на основном концепте размывает выдачу (762 записи и 0 попаданий в TOP-50 против 262 и 5).
 
 ### Fetch Abstracts (efetch)
 
@@ -79,7 +126,7 @@ Label: **"LIMITED FALLBACK"** в ## Мета секции.
 
 **SIZE CAP: ≤ 20KB (~300 строк)**
 Per paper: metadata + 1 sentence Contrib. No full abstracts.
->20 papers → composite TOP-20 (citations + recency), rest compressed.
+>LIMIT papers → composite TOP-LIMIT (citations + recency), rest compressed. LIMIT задаёт ядро в промпте агента (дефолт 30); число 20 в примерах ниже и выше — только иллюстрация.
 
 ```markdown
 # PubMed — результаты по "{REFINED_QUERY_EN}"

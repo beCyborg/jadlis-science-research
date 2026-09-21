@@ -5,6 +5,169 @@
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-09-21
+
+### Для человека
+
+- **Поиск по научным базам подешевел так же, как добор по цитированиям.** Запросы к шести API
+  (PubMed, Europe PMC, OpenAlex, Semantic Scholar, CORE, ClinicalTrials), разбор ответов и приведение
+  их к общему виду теперь делает скрипт `scripts/source-fetch.py`, а модель только оценивает
+  релевантность и ранжирует. Замер 21.09.2026 показал, что стоимость сбора определяется числом ходов
+  агента — каждый ход перечитывает 70–100 тысяч токенов контекста, — и агенты-источники тратили на
+  возню с API от 14 до 52 ходов (Cochrane 52, Semantic Scholar 40, PubMed 28). В протоколах прописан
+  бюджет: 5–8 ходов на источник вместо прежних 14–52. Ровно этот же ход в фазе добора по цитированиям
+  дал падение с 24–34 ходов до 6–7. Живая проверка всех шести: 1–3 секунды на источник, 21–32 статьи
+  с аннотациями.
+- **Три источника без API (Cochrane и гайдлайны, эксперты в вебе, Epistemonikos) получили правило
+  экономии вместо скрипта**: независимые поисковые вызовы идут одним сообщением в параллель,
+  страницы выдачи поодиночке не открываются, потолок — 10 ходов.
+- **Полный текст работы из CORE больше не может попасть в контекст агента.** Раньше это зависело от
+  того, не забыл ли агент вырезать его командой; теперь поле просто не доходит до вывода (80–180 тысяч
+  знаков на запись, десятки записей за запрос), остаётся только отметка «полный текст есть».
+- **Europe PMC умеет отказывать молча.** 21.09.2026 он весь день отвечал «200 OK» с пустым телом —
+  теперь повтор при таком ответе делает скрипт, и не только на основном запросе: на живой проверке
+  один прогон из трёх попадал на такой пустой ответ и без повтора терял весь проход за свежими
+  работами.
+- **Europe PMC и OpenAlex перестали приносить знаменитое вместо нужного.** Оба источника искали по
+  полному тексту и сортировали по цитируемости — наверх всплывали известные статьи, где термин упомянут
+  мимоходом (в замере первой строкой шла работа про токсичность тяжёлых металлов по запросу про
+  мелатонин и фазу сна). Теперь поиск идёт по заголовку и аннотации, плюс отдельный проход за свежими
+  работами. Замер 21.09.2026 против списков литературы двух систематических обзоров (88 работ по теме),
+  только параллельный поиск, без добора по цитированиям: было 2 попадания, стало 13; одни лишь
+  исправленные запросы дают 9, один лишь подъём лимита — 4.
+- **PubMed ищет по релевантности и в два прохода.** Без явного параметра PubMed отдавал самые свежие
+  записи, а не самые подходящие (в замере — 0 попаданий в первых пятидесяти против 5). Теперь сортировка
+  по релевантности, и отдельный проход только за РКИ, мета-анализами, систематическими обзорами и
+  гайдлайнами: 13 попаданий против 5.
+- **Общие ссылки обзоров — отдельный шаг добора.** У найденных обзоров и мета-анализов (до 20) берутся
+  списки литературы, в корпус идут работы, на которые ссылаются хотя бы два из них. Отбор делает скрипт
+  `scripts/cocite.py`, без модели: один запрос к OpenAlex на обзор. Замер на двух темах: случайная
+  ссылка обзора оказывается нужной работой в 3–6% случаев, общая для двух обзоров — в 20–40%, для трёх —
+  в 46–56%. Выключается аргументом `cocite: false`.
+- **Добор по цитированиям подешевел.** Запросы к базам, разбор ответов и отсев уже найденного теперь
+  делает скрипт `scripts/chase.py` (5 секунд на опорную статью: кто её цитирует, её список литературы,
+  запасной путь через OpenCitations), а модель только отбирает подходящее по теме. На замере 21.09.2026
+  шесть таких агентов были самой дорогой фазой сбора: по 24–34 хода ручной работы с API каждый.
+- **Добранные статьи доходят до отчёта с содержанием.** Раньше работы, найденные по цитированиям,
+  попадали к автору отчёта только в виде DOI с метаданными Crossref — без сути. Теперь каждый шаг добора
+  пишет свой файл (`snowball_*.md`, `cocite.md`), и они входят в материалы для отчёта.
+- **Корпус больше не упирается в потолок раньше времени.** Замер 21.09.2026 показал, что старый лимит
+  (120 статей, по 20 с источника) съедался одним только параллельным поиском — добору по спискам
+  цитирования не оставалось мест. Теперь берём по 30 статей с источника, потолок корпуса 240,
+  полные тексты тянем у 10 верхних открытых работ вместо 6; пороги бюджета подняты под новый объём.
+  Все три числа можно переопределить при запуске, чтобы сравнивать старую и новую полноту на одном коде.
+- **Видно, что обрезалось.** В заметку записывается, чем закончился сбор (насыщение, потолок, бюджет),
+  сколько статей нашлось сырыми и сколько осталось после склейки дублей. Раньше это жило только в чате
+  и умирало вместе с сессией.
+- **Новый источник — CORE.** Диссертации, отчёты, рабочие бумаги и репозиторные открытые копии: то,
+  чего нет в журнальных базах. Это же спасательный круг для полного текста — если открытой копии
+  не нашлось у Unpaywall, статья ищется в репозиториях по DOI.
+- **Препринты в биомедицине.** Europe PMC теперь спрашивается вторым запросом про препринты
+  (bioRxiv/medRxiv и прочие) — до 10 штук сверх основной выдачи, отдельной секцией и с честной
+  пометкой «не прошёл рецензирование». У самих bioRxiv/medRxiv поиска по словам нет.
+- **Europe PMC умеет отказывать молча.** 21.09.2026 он весь день отвечал «200 OK» с пустым телом —
+  для агента это выглядело как «ничего не нашлось». Теперь живым ответ считается только при наличии
+  поля `hitCount`, иначе — повтор и запасной путь. Ноль найденных статей отказом не считается.
+- **Отозванные статьи ловятся четвёртым способом.** Добавлен обратный поиск: «есть ли уведомление об
+  отзыве, указывающее на эту статью» — он находит отзыв даже тогда, когда в записи самой статьи о нём
+  ни слова. Запрос дорогой по лимитам, поэтому идёт только по верхнему слою корпуса
+  (мета-анализы, систематические обзоры, RCT и самые цитируемые).
+- **Ссылка проверяется по трём полям, а не по одному.** К сверке заголовка добавились год публикации
+  (с допуском в год — онлайн-первым и в номере) и фамилия первого автора. Совпал заголовок, но
+  разъехались и год, и автор — статья помечается неверифицированной и в доказательную таблицу не идёт.
+- **Добор по цитированиям пережил отказ двух API.** Если легли и OpenAlex, и Semantic Scholar,
+  подключается третий, бесплатный и без ключа, — OpenCitations.
+- **Дешёвый режим замера.** Можно остановить прогон сразу после сбора корпуса, без синтеза и критика,
+  чтобы просто посмотреть на полноту выборки.
+
+### For agents
+
+- `scripts/source-fetch.py` — new. One subcommand per API source
+  (`pubmed|europepmc|openalex|s2|core|clinicaltrials`), common CLI
+  `--query --limit --year-from --preprints --out`, stdlib only, system python3 (3.9.6). It runs the
+  passes each protocol prescribes (PubMed: `sort=relevance` + evidence-`[pt]` pass at ⅔ LIMIT +
+  general at ⅓, then efetch XML → abstract/pubTypes/year/DOI, `PubmedBookArticle` included;
+  Europe PMC: `CITED desc` + recency window + optional `SRC:PPR` on top of LIMIT;
+  OpenAlex: `title_and_abstract.search` + `cited_by_count:desc` + relevance/last-3-years,
+  abstract rebuilt from `abstract_inverted_index`; S2 relevance at 1 RPS with 429 backoff;
+  CORE with the trailing slash, `fullText` never emitted (`hasFullText` boolean instead);
+  ClinicalTrials v2 → NCT/status/phase/`sampleN`/summary string), merges and dedupes them, and writes
+  `{source, apiStatus, total, passes[], truncated, remaining, note, papers[]}` with one normalized
+  PAPER shape. Exit 0 for `ok`/`empty`, **exit 2 for `unavailable`** → the agent takes the protocol's
+  documented fallback. Missing fields are `null`; key values are redacted out of every output.
+  Europe PMC's retry lives in the source function, not in the transport: its failure mode is HTTP 200
+  with a body lacking `hitCount`, which `request()` cannot see as an error.
+- protocols: each of the six API protocols opens with «Primary: скрипт (начни отсюда)» — exact
+  command, the JSON shape, the rule «exit 2 / `apiStatus=unavailable` → ручной путь ниже и его
+  фоллбэк; иначе ручные curl НЕ нужны», and a 5–8 turn budget with a hard cap of 3 script runs.
+  The manual REST sections stay as reference + fallback (`> Ручной путь…`), including the parts the
+  script does not cover (S2 `/citations`, `/references`, `/batch`; CORE by-DOI; CT single study).
+  `cochrane-guidelines`, `web-experts`, `epistemonikos` get a «Бюджет ходов» note instead: fire the
+  protocol's independent MCP calls in ONE turn in parallel, target ≤10 turns.
+- `workflows/search-paper-core.js` `sourcePrompt`: the ПРОТОКОЛ line now says to start from the
+  «Primary: скрипт» section when the protocol has one and not to hand-write curl while the script
+  works, and passes `WORK_DIR` for the script output.
+- `tests/test_sp_source_fetch.py` — new: py39 parse, subcommand set, the script-first section present
+  in all six protocols (and absent from the three MCP ones, which must carry «Бюджет ходов» instead),
+  DOI normalization, inverted-index abstract + cap, PubMed efetch XML → record (journal article and
+  book chapter), the Europe PMC `hitCount` criterion, CORE record dropping `fullText`, CT
+  normalization, pass merging with preprints on top of LIMIT, and key redaction.
+- `workflows/search-paper-core.js`:
+  - caps are arg-overridable via `capArg(A.…)`: `PER_SOURCE_TOP` (new, default 30, substituted into
+    protocol `{LIMIT}`), `PAPER_CAP` 120 → 240, `FULLTEXT_CAP` 6 → 10; budget floors
+    `SNOWBALL_BUDGET_FLOOR` 80k → 120k, `FULLTEXT_BUDGET_FLOOR` 50k → 80k.
+  - `capStats` hoisted out of the return object (`stoppedBy`, `capHitFanout`, `capHitSnowball`,
+    `rawPapers`, `uniquePapers`, `paperCap`, `perSourceTop`); new `corpusOnly` arg returns
+    `status: 'corpus-only'` with a `corpus[]` right after Snowball, skipping Enrich/Synthesize/Adversarial.
+  - new source `core` in `ALL_SOURCES` (prefix `cr` — `co` is Cochrane), in `defaultSources()` base
+    (ON for every discipline), and in `SEARCH_PLAN.queries` properties + `required[]`;
+    `meta.phases` Fan-out now says 10 sources and stays a pure literal.
+  - `HUB` gains a required nullable `doi`; `dedupPrompt` asks for it and the JS frontier-hub builder
+    passes `normDoi(p.doi)`. `chasePrompt` is now a three-rung ladder
+    OpenAlex → S2 → **OpenCitations Index v2** (`/index/v2/{citations,references}/doi:{DOI}`, keyless,
+    used only when both failed AND the hub has a DOI), with a mandatory batch hydration of the new DOIs
+    through Crossref/OpenAlex — OpenCitations returns identifiers only, no titles.
+  - `enrichPrompt(dois, idx, topTier)`: 4th retraction signal
+    `works?filter=updates:{DOI},update-type:retraction&rows=1` (`total-results > 0` → retracted),
+    run **only** for the top tier computed in JS (`studyType ∈ {meta-analysis, systematic-review, rct}`
+    or citations in the corpus' top third) — it is a list query, 3 RPS polite, not 10.
+  - `ENRICH_ITEM` gains `yearMatch` / `authorMatch` (`boolean|null`); `titleMatch` semantics unchanged.
+    New helper `isUnverifiedItem(e)` = `!titleMatch || (yearMatch === false && authorMatch === false)`,
+    used by `unverifiedCount`, `synthPrompt`'s UNVERIFIED list and the fulltext OA candidate filter.
+  - `fulltextPrompt`: after `pdf-fetch.sh` exit 2 and a second Unpaywall locus, a CORE-by-DOI rung
+    (`q=doi:"{DOI}"`, `limit=1`, `downloadUrl`) before returning `extracted: false`.
+  - `sourcePrompt` rule 1 rewritten around `{LIMIT}` = `PER_SOURCE_TOP`.
+- `skills/science-research/protocols/core-protocol.md` — new. Trailing slash on `/v3/search/works/` is
+  mandatory (301 + HTML redirect body otherwise; always `curl -sL`); `Authorization: Bearer`;
+  `x-ratelimit-{limit,remaining,retry-after}` with back-off below 5; `fullText` (80–180k chars/record)
+  MUST be stripped with `jq 'del(.results[].fullText)'` before reading; `doi` may be null;
+  `downloadUrl` is a direct PDF; query syntax limited to keywords + `AND`/`OR`; no Brave fallback.
+- `protocols/europe-pmc-protocol.md`: unavailability criterion is the **absence of `hitCount`**,
+  regardless of HTTP status (`jq -e 'has("hitCount")'`); `hitCount: 0` is a legitimate empty result.
+  Preprint sub-query `AND SRC:PPR`, `pageSize=10`, `sort=P_PDATE_D desc` — **not verified against the
+  live API (search was down all of 21.09.2026)**, documented fallback is to repeat without `sort` and
+  sort by `firstPublicationDate` locally. Preprints are +10 on top of LIMIT, separate dump section,
+  `qualitySignals: preprint`, `studyType` from the normal enum.
+- `protocols/openalex-protocol.md`: `mailto` is no longer a rate-limit lever (key sets
+  `x-ratelimit-limit-usd` 1 vs 0.1) — `&api_key=` only, `OPENALEX_MAILTO` is a contact;
+  read `x-ratelimit-remaining-usd` from the headers into the dump's Мета, and below 0.05 send the
+  chaser straight to S2/OpenCitations.
+- `protocols/{arxiv,europe-pmc,openalex,pubmed,s2}-protocol.md`: `TOP-20` → `TOP-LIMIT` in the size cap.
+- `references/live-rate-limits.md`: new «Снимок 2026-09-21» (OpenAlex usd headers, CORE v3,
+  OpenCitations v2, Crossref retraction filter, bioRxiv/medRxiv = date dump only, Europe PMC silent
+  failure, scite/Consensus pricing) + measurements added while wiring the sources.
+- `references/quality-framework.md`: retraction row is four signals now; new anti-hallucination
+  section (title / year ±1 / first-author family, and what counts as unverified).
+- `references/source-registry.md`: v5.2, CORE moved from «будущее расширение» into the active table,
+  OpenCitations added to enrichment, preprint channel documented, «добавление источника» steps
+  rewritten around the workflow and the test.
+- `skills/science-research/SKILL.md`: step 2b writes `capStats` into the draft frontmatter
+  (`stopped_by`, `papers_raw`, `papers_unique`, `paper_cap`, `cap_hit_*`); fan-out count 9 → 10.
+- `tests/test_sp_sources_registry.py` — new: every `ALL_SOURCES` key has a protocol file, prefixes are
+  unique, every source is in `defaultSources()` and in `SEARCH_PLAN.queries` (properties + `required`),
+  `meta` holds no template literals or variables, caps are `capArg(A.…)`-overridable.
+- `references/gotchas.md` fan-out count, README/README.en source list, retraction and reference-check rows.
+
 ## [2.0.1] — 2026-09-19
 
 ### Для человека

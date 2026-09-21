@@ -6,7 +6,40 @@
 
 ---
 
+## Primary: скрипт (начни отсюда)
+
+```bash
+eval "$(bash "{PLUGIN_ROOT}/scripts/secret.sh" --export SEMANTIC_SCHOLAR_API_KEY)"
+python3 "{PLUGIN_ROOT}/scripts/source-fetch.py" s2 --query '{REFINED_QUERY_EN}' --limit {LIMIT} --out "{WORK_DIR}/_fetch_s2.json"
+```
+
+Скрипт: `/graph/v1/paper/search` по релевантности с полным набором `fields` (abstract, externalIds,
+publicationTypes, citationCount, influentialCitationCount, openAccessPdf, year), заголовок
+`x-api-key` из env, лимит 1 RPS соблюдён паузой, на 429 — backoff и повтор (из-за этого запуск
+может занять до ~20 с — это нормально, а не зависание).
+
+В stdout — одна строка сводки, в `--out` — JSON:
+`{source, apiStatus, total, passes[], truncated, remaining, note, papers[]}`;
+в `papers[]` — `title, doi` (нормализованный), `pmid, externalId` (S2 paperId — нужен для
+чейсинга), `year, pubTypes[]` (из `publicationTypes` — по ним определяй `studyType`), `citations,
+influentialCitations` (уникальный сигнал S2), `fwci` (null — S2 его не даёт), `isOA, oaUrl,
+abstract` (≤1500 знаков), `pass`, плюс `fieldsOfStudy`. Чего API не отдал — `null`.
+
+**Правило:** `exit 2` / `apiStatus=unavailable` → ручной путь ниже и его фоллбэк (Brave DEGRADED);
+иначе ручные `curl` НЕ нужны.
+
+**Бюджет ходов: 5–8 на источник** — запустить скрипт → Read JSON → оценить релевантность и
+отранжировать до TOP-{LIMIT} → Write дамп → вернуть ответ по схеме. Если первый проход явно мимо
+темы или почти пуст, можно запустить скрипт ещё раз с уточнённой строкой запроса, но **не более
+3 запусков скрипта суммарно** (1 RPS — каждый лишний запуск стоит секунд).
+
+---
+
 ## Primary: REST API
+
+> Ручной путь — референс и фоллбэк. Нужен, только если скрипт вернул `exit 2`.
+> Эндпоинты `/citations`, `/references`, `/batch` и `search/match` скриптом не покрыты —
+> ими пользуются фазы snowball и enrich, здесь они остаются справочником.
 
 **Base URL:** `https://api.semanticscholar.org/graph/v1`
 
@@ -198,7 +231,7 @@ S2 search-агент (Fan-out) и citation-chasing (Snowball, `/citations` + `/r
 
 **SIZE CAP: ≤ 20KB (~300 строк)**
 Per paper: metadata + 1 sentence Contrib. No full abstracts.
->20 papers → composite TOP-20 (citations + recency), rest compressed.
+>LIMIT papers → composite TOP-LIMIT (citations + recency), rest compressed. LIMIT задаёт ядро в промпте агента (дефолт 30); число 20 в примерах ниже и выше — только иллюстрация.
 
 ```markdown
 # Semantic Scholar — результаты по "{REFINED_QUERY_EN}"

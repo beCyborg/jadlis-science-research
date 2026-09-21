@@ -28,9 +28,9 @@ This is my workplace published as it is, not a product: whatever I stopped using
 
 | By hand | With an AI chat | With this plugin |
 |---|---|---|
-| **Where "proven" came from.** Nobody reaches the paper itself: what circulates is a blog retelling a press release. | Retells the same secondary texts; never goes to the full text, and does not always name the source. | Queries PubMed, Europe PMC, Semantic Scholar, OpenAlex, ClinicalTrials.gov, Epistemonikos and the Cochrane, NICE and UpToDate sites in one run, then follows citations forward and backward for more papers. |
-| **Retracted papers.** A retracted study keeps being cited for years, and the retelling never shows it. | Answers from what was in its training data: a retraction that happened later is invisible to it. | Every DOI goes through Crossref before synthesis, checked against three retraction signals; retracted papers stay out of the conclusions and are listed separately. |
-| **Whether the reference is real.** Nothing to check it with except opening each one and comparing by hand. | The link looks genuine and leads elsewhere: the DOI and the title do not match. | The title Crossref returns is compared with the claimed one; if they diverge, the paper is marked unverified and never enters the evidence table. |
+| **Where "proven" came from.** Nobody reaches the paper itself: what circulates is a blog retelling a press release. | Retells the same secondary texts; never goes to the full text, and does not always name the source. | Queries PubMed, Europe PMC, Semantic Scholar, OpenAlex, ClinicalTrials.gov, Epistemonikos, CORE (theses, reports and repository copies — what never made it into a journal) and the Cochrane, NICE and UpToDate sites in one run, then follows citations forward and backward for more papers. |
+| **Retracted papers.** A retracted study keeps being cited for years, and the retelling never shows it. | Answers from what was in its training data: a retraction that happened later is invisible to it. | Every DOI goes through Crossref before synthesis, checked against four retraction signals (including a reverse lookup for the retraction notice); retracted papers stay out of the conclusions and are listed separately. |
+| **Whether the reference is real.** Nothing to check it with except opening each one and comparing by hand. | The link looks genuine and leads elsewhere: the DOI and the title do not match. | Three fields are compared against Crossref — title, publication year (±1, online-first vs print) and the first author's family name; if they diverge, the paper is marked unverified and never enters the evidence table. |
 | **How much a finding weighs.** A single preprint and a systematic review weigh the same once retold. | Gives the most confident answer available and hides how uneven the underlying studies are. | Assigns GRADE per outcome, not per study type: a meta-analysis of weak trials does not become strong evidence, and "not enough data" is an answer too. |
 | **Who argues with the conclusion.** Nobody: the draft is read by whoever wrote it. | Agrees with itself and only sounds more certain when you push back. | A separate critic hunts for refutations, rechecks retraction on the key DOIs and looks at PubPeer. Key claims are cross-checked, and unchecked ones are marked. |
 
@@ -62,8 +62,8 @@ Run exactly these commands, verbatim, without shortening anything:
 2. claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
 3. claude plugin install jadlis-science-research@jadlis
 4. claude plugin list — show me the lines for jadlis-search and jadlis-science-research and their versions.
-5. /jadlis-search:keys — set up the scientific source keys: PubMed, Semantic Scholar, OpenAlex
-   and the contact emails for Crossref and Unpaywall.
+5. /jadlis-search:keys — set up the scientific source keys: PubMed, Semantic Scholar, OpenAlex,
+   CORE and the contact emails for Crossref and Unpaywall.
 Ask me for the Brave and Firecrawl values and substitute them for the ellipses yourself.
 Do not change the order: jadlis-science-research pulls jadlis-search in as a dependency, but
 auto-installing a dependency never asks for keys — so jadlis-search is installed separately and
@@ -112,7 +112,7 @@ reviewed by a human, and the review is yours.
 
 **What you need.** The `jadlis-search` plugin with Brave and Firecrawl keys — installed first; Cochrane,
 the guidelines and Epistemonikos run on them. On top of that you need the scientific source keys —
-PubMed, Semantic Scholar, OpenAlex and contact emails for Crossref and Unpaywall: you enter them
+PubMed, Semantic Scholar, OpenAlex, CORE and contact emails for Crossref and Unpaywall: you enter them
 once with `/jadlis-search:keys`, and the values go into the macOS Keychain. Without them some databases
 drop to anonymous limits and answer intermittently. I do not retell other people's pricing: those
 bills are theirs. The notes folder is set at install time (`VAULT_PATH`, `~/Jadlis` by default) —

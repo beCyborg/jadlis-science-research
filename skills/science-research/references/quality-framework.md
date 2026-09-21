@@ -176,7 +176,7 @@ GRADE (Grading of Recommendations, Assessment, Development and Evaluation) оц�
 | Red Flag | Источник данных | Severity |
 |----------|---------------|----------|
 | **Industry funding** | Crossref `funder` field | WARNING (не автоматический disqualify) |
-| **Retracted** (три сигнала, достаточно одного) | Crossref: (a) `updated-by[].type == "retraction"` — основной сигнал отозванной статьи (дата отзыва = его `updated.date-parts`); (b) title начинается с `RETRACTED`/`Retracted:`/`WITHDRAWN`; (c) `update-to[].type == "retraction"` — сам DOI является уведомлением об отзыве | CRITICAL — исключить из evidence |
+| **Retracted** (четыре сигнала, достаточно одного) | Crossref: (a) `updated-by[].type == "retraction"` — основной сигнал отозванной статьи (дата отзыва = его `updated.date-parts`); (b) title начинается с `RETRACTED`/`Retracted:`/`WITHDRAWN`; (c) `update-to[].type == "retraction"` — сам DOI является уведомлением об отзыве; (d) **обратный поиск уведомления**: `works?filter=updates:{DOI},update-type:retraction&rows=1` → `total-results > 0` значит, что уведомление об отзыве указывает на этот DOI, даже если в записи статьи нет `updated-by` | CRITICAL — исключить из evidence |
 | **Predatory journal** | Beall's list (beallslist.net) + Cabells | CRITICAL — исключить из evidence |
 | **Small N** | Paper metadata | WARNING если N < 100 для RCT; контекстно для rare diseases |
 | **Single-center** | Paper metadata / fulltext | WARNING |
@@ -189,6 +189,26 @@ GRADE (Grading of Recommendations, Assessment, Development and Evaluation) оц�
 
 - **CRITICAL** → Статья исключается из evidence base, отмечается в отчёте
 - **WARNING** → Статья остаётся, но с пониженным evidence strength и пометкой
+
+> Сигнал (d) — list-запрос Crossref: polite pool даёт по нему 3 RPS против 10 у singleton'а.
+> Поэтому ядро гоняет его **только по топ-тиру** корпуса (studyType meta-analysis/systematic-review/rct
+> либо верхняя треть по цитированиям), а не по всем DOI батча: по всему корпусу он удвоил бы
+> число запросов ради единичных находок.
+
+### Anti-hallucination: три поля, а не одно
+
+`titleMatch` больше не единственная сверка с Crossref. Для каждого DOI enrich сравнивает:
+
+| Поле | Источник Crossref | Допуск | Нет данных |
+|------|------------------|--------|-----------|
+| `titleMatch` | `message.title[0]` | регистр, пунктуация, пробелы | DOI не резолвится → `false` |
+| `yearMatch` | `message.issued.date-parts[0][0]` | **±1 год** (online-first vs печатный номер) | `null` |
+| `authorMatch` | `message.author[0].family` | регистр и диакритика (Müller = Muller), часть двойной фамилии | `null` |
+
+Статья считается **unverified** (не идёт в выводы, в Evidence Table — только с явной пометкой), если
+`titleMatch == false` **либо** `titleMatch == true`, но `yearMatch` и `authorMatch` **оба** `false`:
+совпавший заголовок при разошедшихся одновременно годе и первом авторе означает, что статья
+приклеена не к своему DOI. Один разошедшийся признак не считается — `null` тем более.
 
 ---
 
