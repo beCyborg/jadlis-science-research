@@ -3,8 +3,8 @@ export const meta = {
   description: 'Ядро search-paper: query-builder → fan-out по научным источникам → citation snowballing → Crossref/Unpaywall enrich (retraction + anti-hallucination) → GRADE-синтез → adversarial critic → fix. Vault-контракт — в скилле.',
   phases: [
     { title: 'Query', detail: 'PICO/PECO → блоки синонимов → готовые строки запросов per-source' },
-    { title: 'Fan-out', detail: 'до 9 источников параллельно (PubMed/Europe PMC/S2/OpenAlex/arXiv/Cochrane/web-experts/Epistemonikos/ClinicalTrials)' },
-    { title: 'Snowball', detail: 'dedup → ≤6 hubs → forward/backward citation chasing до насыщения (≤2 итераций, cap 120)' },
+    { title: 'Fan-out', detail: 'до 10 источников параллельно (PubMed/Europe PMC/S2/OpenAlex/arXiv/Cochrane/web-experts/Epistemonikos/ClinicalTrials/CORE)' },
+    { title: 'Snowball', detail: 'dedup → ≤6 hubs → forward/backward citation chasing до насыщения (≤2 итераций, cap 240)' },
     { title: 'Enrich', detail: 'батчи DOI: Crossref retraction+titleMatch+funder, Unpaywall OA, fulltext top-OA' },
     { title: 'Synthesize', detail: 'GRADE per-outcome → decision-first draft в workDir' },
     { title: 'Adversarial', detail: 'независимый критик: контраргументы, per-claim challenge, PubPeer, retraction recheck' },
@@ -49,19 +49,36 @@ const AI_MODEL_RETRY = 'claude-opus-5'
 
 // ── Константы always-deep (saturation/cap/budget гейты вместо tiered-режима) ──
 const MIN_SOURCES = 2          // <2 источников → insufficient-sources, скилл не пишет в vault
-const PAPER_CAP = 120          // жёсткий потолок корпуса (защита snowball от взрыва)
+// Капы переопределяются аргументами — эталонный замер recall гоняет старые и новые значения
+// на одном коде. Замер 21.09.2026 по 7 прогонам: 8 источников × TOP-20 = ~160 сырых → 110–135
+// уникальных (пересечение баз ~25%), то есть потолок 120 съедал fan-out целиком и оставлял
+// snowball'у 0–10 мест. Связывал лимит на источник, а не пересечение баз.
+const capArg = (v, dflt, min, max) => Number.isFinite(+v) && +v >= min ? Math.min(Math.floor(+v), max) : dflt
+const PER_SOURCE_TOP = capArg(A.perSourceTop, 30, 5, 100)   // результатов с одного источника
+const PAPER_CAP = capArg(A.paperCap, 240, 20, 600)          // жёсткий потолок корпуса (защита snowball от взрыва)
 const HUB_CAP = 6              // ≤6 hub-ов на итерацию snowball
 const MAX_SNOWBALL_ITERS = 2
 const SATURATION_THRESHOLD = 0.10  // стоп если newUnique/canonical < 0.10
 const ENRICH_BATCH = 25        // DOI на один Crossref-батч (polite pool 10 RPS → секунды)
-const FULLTEXT_CAP = 6         // top-OA статей под fulltext-summary
-const SNOWBALL_BUDGET_FLOOR = 80_000   // не начинать итерацию snowball, если меньше осталось
-const FULLTEXT_BUDGET_FLOOR = 50_000   // не тянуть fulltext, если меньше осталось
+const FULLTEXT_CAP = capArg(A.fulltextCap, 10, 0, 30)       // top-OA статей под fulltext-summary
+// Пороги бюджета подняты вместе с корпусом: после snowball впереди вдвое больше enrich-батчей
+// и вдвое больший вход синтеза.
+const SNOWBALL_BUDGET_FLOOR = 120_000  // не начинать итерацию snowball, если меньше осталось
+const FULLTEXT_BUDGET_FLOOR = 80_000   // не тянуть fulltext, если меньше осталось
+// Co-citation prefilter (scripts/cocite.py): выключается аргументом cocite:false.
+const COCITE = A.cocite !== false
+const COCITE_HUB_CAP = 20      // обзоров/МА корпуса, чьи списки литературы пересекаем
+const COCITE_MAX = 40          // статей за шаг (агент переносит их из JSON в схему)
+const REVIEW_TYPES = ['meta-analysis', 'systematic-review', 'review', 'guideline']
+// corpusOnly: стоп после snowball, без enrich/синтеза/критика — дешёвый замер полноты выборки.
+const CORPUS_ONLY = !!A.corpusOnly
 
 const SKILL_DIR = `${PLUGIN_ROOT}/skills/science-research`
 const PROTO = id => `${SKILL_DIR}/protocols/${id}`
 
-// ── Реестр источников: 9 бесплатных ──
+// ── Реестр источников: 10 бесплатных ──
+// prefix у каждого источника уникален — он же якорь ссылок в отчёте. `co` занят Cochrane,
+// поэтому CORE получил `cr` (тест tests/test_sp_sources_registry.py стережёт уникальность).
 const ALL_SOURCES = {
   pubmed:        { source: 'PubMed',          prefix: 'pm', protocol: PROTO('pubmed-protocol.md'),               file: 'pubmed.md',        kind: 'biomed' },
   europepmc:     { source: 'Europe PMC',      prefix: 'em', protocol: PROTO('europe-pmc-protocol.md'),           file: 'europe-pmc.md',    kind: 'biomed' },
@@ -72,11 +89,14 @@ const ALL_SOURCES = {
   webExperts:    { source: 'Web Experts',     prefix: 'w',  protocol: PROTO('web-experts-protocol.md'),          file: 'web-experts.md',   kind: 'expert' },
   epistemonikos: { source: 'Epistemonikos',   prefix: 'ep', protocol: PROTO('epistemonikos-protocol.md'),        file: 'epistemonikos.md', kind: 'guideline' },
   clinicaltrials:{ source: 'ClinicalTrials.gov', prefix: 'ct', protocol: PROTO('clinicaltrials-protocol.md'),    file: 'clinicaltrials.md', kind: 'trials' },
+  core:          { source: 'CORE',             prefix: 'cr', protocol: PROTO('core-protocol.md'),                file: 'core.md',          kind: 'grey' },
 }
 
-// Базовый набор: 9 бесплатных. arXiv/cochrane/epistemonikos снимаются по дисциплине.
+// Базовый набор: 10 бесплатных. arXiv/cochrane/epistemonikos снимаются по дисциплине.
+// CORE включён для ВСЕХ дисциплин: серая литература (диссертации, отчёты, репозиторные OA-копии)
+// нужна везде — и как антидот publication bias, и как запасной OA-локус для fulltext.
 function defaultSources() {
-  const base = ['pubmed', 'europepmc', 's2', 'openalex', 'arxiv', 'cochrane', 'webExperts', 'epistemonikos', 'clinicaltrials']
+  const base = ['pubmed', 'europepmc', 's2', 'openalex', 'arxiv', 'cochrane', 'webExperts', 'epistemonikos', 'clinicaltrials', 'core']
   const isBiomed = DISCIPLINE === 'biomedical' || DISCIPLINE === 'general'
   const wantsPreprint = /preprint|biorxiv|medrxiv|pre-print/i.test(QUERY_EN)
   return base.filter(s => {
@@ -133,8 +153,9 @@ const SEARCH_PLAN = {
         webExperts: { type: ['string', 'null'] },
         epistemonikos: { type: ['string', 'null'] },
         clinicaltrials: { type: ['string', 'null'] },
+        core: { type: ['string', 'null'], description: 'простые ключевые слова; из операторов только AND/OR и кавычки для фразы' },
       },
-      required: ['pubmed', 'europepmc', 's2', 'openalex', 'arxiv', 'cochrane', 'webExperts', 'epistemonikos', 'clinicaltrials'],
+      required: ['pubmed', 'europepmc', 's2', 'openalex', 'arxiv', 'cochrane', 'webExperts', 'epistemonikos', 'clinicaltrials', 'core'],
     },
     skip: { type: 'array', items: { type: 'string' }, description: 'ключи источников, которые осмысленно пропустить для этого запроса' },
     notes: { type: 'string', description: 'кратко: логика фрейминга и расширения' },
@@ -182,10 +203,11 @@ const HUB = {
   properties: {
     externalId: { type: 'string', description: 'OpenAlex Wxxx / DOI / S2 id / PMID' },
     api: { type: 'string', enum: ['openalex', 's2'], description: 'через какой API чейсить (OpenAlex 100 RPS предпочтительнее)' },
+    doi: { type: ['string', 'null'], description: 'DOI hub-а, если он известен; null если нет. Нужен третьей ступени чейсинга — OpenCitations работает ТОЛЬКО по DOI' },
     title: { type: 'string' },
     reason: { type: 'string', description: 'почему hub: высокие citations/FWCI / meta/SR' },
   },
-  required: ['externalId', 'api', 'title', 'reason'],
+  required: ['externalId', 'api', 'doi', 'title', 'reason'],
 }
 const SNOWBALL_DEDUP = {
   type: 'object', additionalProperties: false,
@@ -214,7 +236,9 @@ const ENRICH_ITEM = {
   properties: {
     doi: { type: 'string' },
     crossrefVerified: { type: 'boolean', description: 'DOI резолвится в Crossref' },
-    titleMatch: { type: 'boolean', description: 'title/authors/year из Crossref совпали с заявленными (anti-hallucination)' },
+    titleMatch: { type: 'boolean', description: 'title из Crossref совпал с заявленным (anti-hallucination). Семантика НЕ менялась: downstream-фильтры смотрят на titleMatch !== false' },
+    yearMatch: { type: ['boolean', 'null'], description: 'год публикации совпал (допуск ±1 — online-first vs print). null, если года не было у статьи или в Crossref' },
+    authorMatch: { type: ['boolean', 'null'], description: 'фамилия первого автора совпала (без учёта регистра и диакритики). null, если автора не было у статьи или в Crossref' },
     isRetracted: { type: 'boolean', description: 'update-to[].type == retraction' },
     retractionDate: { type: ['string', 'null'] },
     industryFunded: { type: 'boolean', description: 'funder[] содержит pharma/biotech' },
@@ -222,7 +246,7 @@ const ENRICH_ITEM = {
     isOA: { type: 'boolean' },
     oaPdfUrl: { type: ['string', 'null'] },
   },
-  required: ['doi', 'crossrefVerified', 'titleMatch', 'isRetracted', 'retractionDate', 'industryFunded', 'oaStatus', 'isOA', 'oaPdfUrl'],
+  required: ['doi', 'crossrefVerified', 'titleMatch', 'yearMatch', 'authorMatch', 'isRetracted', 'retractionDate', 'industryFunded', 'oaStatus', 'isOA', 'oaPdfUrl'],
 }
 const ENRICH_BATCH_SCHEMA = {
   type: 'object', additionalProperties: false,
@@ -319,6 +343,11 @@ const FIX = {
 function chunk(arr, n) { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out }
 function normDoi(d) { return (d || '').trim().replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').replace(/^doi:/i, '').toLowerCase() }
 function paperKey(p) { return normDoi(p.doi) || (p.pmid ? `pmid:${p.pmid}` : '') || (p.externalId ? `ext:${p.externalId}` : '') || `t:${(p.title || '').toLowerCase().slice(0, 60)}` }
+// «Unverified» = статья, привязка которой к DOI не подтвердилась Crossref'ом. Два случая:
+// (1) прежний — title не сошёлся; (2) новый — title сошёлся, но год И фамилия первого автора
+// оба разошлись (один разошедшийся признак не считается: ±1 год ловит допуск, автора часто нет).
+// Семантика titleMatch НЕ менялась — downstream-фильтры по `titleMatch !== false` работают как были.
+function isUnverifiedItem(e) { return !!e && e.crossrefVerified && (!e.titleMatch || (e.yearMatch === false && e.authorMatch === false)) }
 
 // ═══════════════════════════════════════════════════════════════════
 // Phase Query — PICO/PECO → блоки синонимов → per-source строки
@@ -345,7 +374,10 @@ ${DECISION ? `РЕШЕНИЕ ПОЛЬЗОВАТЕЛЯ: ${DECISION}` : ''}
 3. Собери готовые строки запросов:
    - pubmed — Boolean с MeSH: \`(концепт1[mh] OR син OR син) AND (концепт2[mh] OR ...)\`, при необходимости фильтры [pt]/[dp]. Прочитай ${PROTO('pubmed-protocol.md')} для синтаксиса.
    - s2 — relevance/semantic строка (без скобок-MeSH).
-   - openalex / europepmc / arxiv / cochrane / epistemonikos / clinicaltrials — нативный синтаксис каждого (прочитай соответствующий protocol при сомнении).
+   - europepmc — Boolean, КАЖДЫЙ термин с полем: \`(TITLE:x OR ABSTRACT:x) AND (TITLE:"y z" OR ABSTRACT:"y z")\`. Без полей Europe PMC ищет по полному тексту, и сортировка по цитируемости выносит наверх нерелевантное (замер 21.09.2026: 0 попаданий в TOP-50 против 12 с полями).
+   - openalex — строка для \`filter=title_and_abstract.search:\` (ключевые слова и фразы в кавычках, без полевых префиксов); по той же причине НЕ для \`search=\`.
+   - arxiv / cochrane / epistemonikos / clinicaltrials — нативный синтаксис каждого (прочитай соответствующий protocol при сомнении).
+   - core — ПРОСТЫЕ ключевые слова EN. Разрешены ТОЛЬКО операторы \`AND\`/\`OR\` и кавычки для точной фразы: \`(omega-3 OR "fish oil") AND triglycerides\`. Никаких MeSH, полевых префиксов и вложенных скобочных конструкций. \`AND\` между концептами обязателен: пробел CORE трактует широко (18 млн попаданий против 1 312 с AND).
    - webExperts — короткая тема EN.
 4. skip[]: какие источники бессмысленны для запроса (напр. arXiv для чисто клинического вопроса; clinicaltrials для не-интервенционного).
 5. Материализуй методологию в данные, агент-источник не должен ничего достраивать.
@@ -369,14 +401,14 @@ EN: ${QUERY_EN}
 ДИСЦИПЛИНА: ${plan.discipline || DISCIPLINE}
 ${DECISION ? `РЕШЕНИЕ: ${DECISION} (приоритет — статьи, помогающие принять именно его)` : ''}
 
-ПРОТОКОЛ: прочитай ${c.protocol} (Read) и следуй ему шаг за шагом — Primary → Fallback при ошибке.
+ПРОТОКОЛ: прочитай ${c.protocol} (Read) и следуй ему шаг за шагом — Primary → Fallback при ошибке. Если в протоколе есть секция «Primary: скрипт» — начни с неё и не пиши curl руками, пока скрипт работает; WORK_DIR для вывода скрипта — ${WORK_DIR}.
 PLUGIN_ROOT = ${PLUGIN_ROOT}
 Пути внутри протоколов и справочников записаны как {PLUGIN_ROOT}/… — подставляй вместо плейсхолдера строку выше. Литеральный \`{PLUGIN_ROOT}\` в команду не отправляй.
 ${TOOL_NOTE}
 ${NO_HALLUCINATION}
 
 ПРАВИЛА:
-1. Лимит ~20 результатов; >20 → оставь TOP-20 по composite(citations × recency), отметь усечение.
+1. LIMIT = ${PER_SOURCE_TOP} — подставляй это число в {LIMIT} протокола (retmax/pageSize/per_page/limit/max_results), дефолт протокола игнорируй. Источник вернул больше → оставь TOP-${PER_SOURCE_TOP} по composite(citations × recency), отметь усечение и общее число найденных (hitCount/total). Brave-каналы с собственным \`count\` в протоколе берут сколько отдаёт протокол.
 2. Для каждой статьи заполни поля PAPER: prefix ([${c.prefix}1], [${c.prefix}2], ...), title, doi/pmid/externalId (ТОЛЬКО из API), year, studyType (enum), sampleN, citations, influentialCitations, fwci (если источник даёт), isOA, oaUrl, contrib (≤30 слов), qualitySignals (multi-center/pre-registered/blinded/large-N/industry-funded/animal/in-vitro).
 3. externalId — обязателен где есть (OpenAlex Wxxx, S2 id, arXiv id, NCT id): нужен для snowball-чейсинга.
 4. studyType определяй по publicationTypes/type/заголовку; если неясно — "other".
@@ -401,62 +433,104 @@ ${files.map(f => `- ${f}`).join('\n')}
 1. Прочитай все файлы, собери единый список статей.
 2. Дедуп: DOI-norm exact → fuzzy title (Jaccard≥0.85) → authors+year. Посчитай canonicalCount.
 3. seenKeys[]: для каждой уникальной статьи — нормализованный ключ (DOI-norm, иначе pmid:/ext:/t:первые60символов title).
-4. Выбери ≤${HUB_CAP} hub-ов для чейсинга: топ по citations/FWCI + ВСЕ мета-анализы и systematic reviews, у которых есть externalId. Для каждого hub: externalId, api ('openalex' предпочтительнее — 100 RPS; 's2' только если нет OpenAlex id), title, reason.
+4. Выбери ≤${HUB_CAP} hub-ов для чейсинга: топ по citations/FWCI + ВСЕ мета-анализы и systematic reviews, у которых есть externalId. Для каждого hub: externalId, api ('openalex' предпочтительнее — 100 RPS; 's2' только если нет OpenAlex id), doi, title, reason.
+   **doi обязательно переноси из данных статьи**, если он там есть (нормализованный, без \`https://doi.org/\`): при отказе и OpenAlex, и S2 третья ступень чейсинга — OpenCitations — работает только по DOI. DOI в файлах нет → doi=null (НЕ выдумывай).
 5. saturationEstimate (0..1): грубая оценка полноты текущего корпуса.
 6. Запиши дедупленный seed-список в ${WORK_DIR}/_seed.md.
 
 ${NO_HALLUCINATION}
 Верни строго по схеме SNOWBALL_DEDUP. НЕ делай сетевых вызовов — работай по файлам.`
 }
+// Имя файлов чейсера выводится из hub-а одинаково в промпте и в JS (synthFiles собираются без агента).
+const chaseTag = hub => String(hub.externalId || hub.doi || 'hub').replace(/[^A-Za-z0-9]+/g, '_').slice(0, 40)
 function chasePrompt(hub, seenKeys) {
-  return `Ты — citation-chasing агент (forward + backward) для snowballing.
+  const hubArg = /^W\d+$/i.test(hub.externalId || '') ? hub.externalId : (hub.doi || hub.externalId)
+  const tag = chaseTag(hub)
+  const seenDois = seenKeys.filter(k => /^10\./.test(k))
+  return `Ты — citation-chasing агент (forward + backward) для snowballing. Запросы к API, разбор ответов и дедуп делает скрипт; твоя работа — ТОЛЬКО оценить релевантность кандидатов.
 
-HUB: "${hub.title}" — externalId=${hub.externalId}, через API=${hub.api}
+HUB: "${hub.title}" — externalId=${hub.externalId}, DOI=${hub.doi || 'нет'}
 ЗАПРОС (релевантность): ${QUERY_EN}
-
-ЗАДАЧА:
-1. Через ${hub.api === 'openalex' ? `OpenAlex (прочитай ${PROTO('openalex-protocol.md')})` : `Semantic Scholar (прочитай ${PROTO('s2-protocol.md')}, используй /citations и /references, batch-endpoint)`} получи:
-   - FORWARD: статьи, ЦИТИРУЮЩИЕ hub (citations).
-   - BACKWARD: статьи из СПИСКА ЛИТЕРАТУРЫ hub (references).
-2. Оставь только РЕЛЕВАНТНЫЕ запросу и НОВЫЕ — которых НЕТ среди уже виденных ключей:
-${seenKeys.slice(0, 400).map(k => `  ${k}`).join('\n')}
-   (ключ статьи: DOI-norm, иначе pmid:/ext:/t:первые60символов title)
-3. Приоритет — мета/SR/RCT и высоко-цитируемые. Верни до 25 новых статей.
 
 ${TOOL_NOTE}
 ${NO_HALLUCINATION}
-Используй list-запросы (не singleton в цикле), per_page вверх. Brave-fallback НЕ используем.
 
-ПРИ HTTP 429:${hub.api === 'openalex' ? `
-1. OpenAlex ответил 429 → повтори ТОТ ЖЕ hub через Semantic Scholar: прочитай ${PROTO('s2-protocol.md')}, используй /citations и /references (batch-endpoint). Ключ: \`\${SEMANTIC_SCHOLAR_API_KEY}\` — проверь через Bash \`[ -n "\${SEMANTIC_SCHOLAR_API_KEY:-}" ]\`; без ключа S2 тоже работает, но лимиты ниже. Получилось — apiUsed="s2", note начни с "openalex-429→s2".
-2. S2 недоступен / тоже 429 / ключа нет и анонимный лимит выбран → graceful skip: addedPapers=[], note начни с "openalex-429-skip".` : `
-graceful skip: addedPapers=[], note начни с "${hub.api}-429-skip".`}
-Верни строго по схеме SNOWBALL_RESULT: hubId="${hub.externalId}", apiUsed, addedPapers[] (только новые), note.`
+ШАГИ (уложись в 4–6 ходов, без ручных curl, пока скрипт работает):
+1. Через Write сохрани в ${WORK_DIR}/_seen_${tag}.txt уже известные DOI, по одному в строке:
+${seenDois.slice(0, 600).join('\n') || '(пусто)'}
+2. Одной Bash-командой:
+   \`eval "$(bash "${PLUGIN_ROOT}/scripts/secret.sh" --export OPENALEX_API_KEY CROSSREF_MAILTO)"; python3 "${PLUGIN_ROOT}/scripts/chase.py" --hub "${hubArg}"${hub.doi ? ` --doi "${hub.doi}"` : ''} --terms "${CHASE_TERMS}" --seen "${WORK_DIR}/_seen_${tag}.txt" --max 80 --out "${WORK_DIR}/_chase_${tag}.json"\`
+   Скрипт сам идёт OpenAlex → (при отказе и наличии DOI) OpenCitations с гидрацией метаданных. В stdout — сводка: apiUsed, forwardTotal, backwardTotal, candidates, kept, note.
+3. Прочитай ${WORK_DIR}/_chase_${tag}.json (Read). Кандидаты уже НОВЫЕ (виденные выброшены) и отсортированы по совпадению с терминами темы (termHits), затем по цитируемости; у каждого есть abstractHead.
+4. Отбери до 25 РЕЛЕВАНТНЫХ запросу: приоритет — мета-анализы, систематические обзоры, РКИ, затем высоко-цитируемые первичные исследования; свежие работы (direction=forward, последние 3 года) не отбрасывай из-за нулевых цитирований. Нерелевантное по теме — выбрасывай, даже при высоком termHits.
+5. Перенеси отобранное в addedPapers по схеме PAPER: prefix "[sn1]"…; title, doi, pmid, externalId, year, citations, fwci, isOA, oaUrl — как в файле (нет → null); influentialCitations=null; sampleN — только если число есть в abstractHead, иначе null; studyType — по type, заголовку и abstractHead (неясно → "other"); contrib ≤30 слов по abstractHead (нет аннотации → "аннотация недоступна; {direction} от hub-а"); qualitySignals — что видно из аннотации, плюс "retracted-flag" при isRetracted=true.
+
+6. Через Write сохрани отобранное в ${WORK_DIR}/snowball_${tag}.md — этот файл читает синтезатор, без него добранные статьи доходят до отчёта голыми DOI. Формат как у источников: заголовок «Snowball от hub-а: {title}», затем по статье — \`### [snN] {title}\`, строка метаданных (DOI · PMID · Year · Type · Citations · OA · direction) и **Contrib:**. addedPapers пуст → файл не пиши.
+
+ЕСЛИ СКРИПТ ЗАВЕРШИЛСЯ С КОДОМ 2 (ни один API не отдал hub):
+- Одна ручная попытка через Semantic Scholar: прочитай ${PROTO('s2-protocol.md')}, используй /citations и /references (batch-endpoint), ключ \`\${SEMANTIC_SCHOLAR_API_KEY}\` через \`secret.sh --export\`. Оставь только новые (нет в файле из шага 1) и релевантные, до 25. Получилось — apiUsed="s2", note начни с "script-fail→s2".
+- S2 тоже отказал → graceful skip: addedPapers=[], note начни с "chase-skip".
+
+Верни строго по схеме SNOWBALL_RESULT: hubId="${hub.externalId}", apiUsed (из сводки скрипта: "openalex" | "opencitations"; либо "s2"), addedPapers[] (только новые), note = сводка скрипта одной строкой + сколько отобрал из скольких.`
+}
+
+// Co-citation: отбор делает скрипт, агент только запускает его и переносит JSON в схему.
+function cocitePrompt(hubIds, seenDois, room) {
+  return `Ты — исполнитель детерминированного шага co-citation. Отбор статей делает скрипт, НЕ ты: ничего не добавляй от себя и ничего не выбрасывай.
+
+${TOOL_NOTE}
+${NO_HALLUCINATION}
+
+ШАГИ:
+1. Через Write сохрани в ${WORK_DIR}/_cocite_seen.txt уже известные DOI, по одному в строке:
+${seenDois.slice(0, 600).join('\n') || '(пусто)'}
+2. Запусти одной Bash-командой:
+   \`eval "$(bash "${PLUGIN_ROOT}/scripts/secret.sh" --export OPENALEX_API_KEY)"; python3 "${PLUGIN_ROOT}/scripts/cocite.py" --hubs "${hubIds.join(',')}" --min 2 --max ${room} --seen "${WORK_DIR}/_cocite_seen.txt" --out "${WORK_DIR}/_cocite.json"\`
+   В stdout придёт сводка: hubsResolved, hubsFailed, refsTotal, sharedTotal, kept, remainingUsd.
+3. Прочитай ${WORK_DIR}/_cocite.json (Read) и перенеси КАЖДЫЙ элемент papers[] в addedPapers по схеме PAPER, без отбора:
+   prefix "[cc1]", "[cc2]"… по порядку файла; title, doi, pmid, externalId, year, citations, fwci, isOA, oaUrl — как в файле (нет значения → null);
+   influentialCitations=null; sampleN=null; studyType — по полю type и заголовку (review → "review"/"systematic-review"/"meta-analysis" по заголовку, иначе "other", не гадай);
+   contrib = "общая ссылка {citedByHubs} обзоров корпуса"; qualitySignals = ["co-cited:{citedByHubs}"] плюс "retracted-flag" если isRetracted=true.
+4. Через Write сохрани человекочитаемый список в ${WORK_DIR}/cocite.md (таблица: prefix | citedByHubs | year | citations | title | doi) и строку сводки из stdout.
+5. Скрипт упал или kept=0 → addedPapers=[], note начни с "cocite-skip" и приведи причину (stderr).
+
+Верни строго по схеме SNOWBALL_RESULT: hubId="cocite", apiUsed="openalex", addedPapers[], note = сводка stdout одной строкой.`
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // Phase Enrich — Crossref/Unpaywall батч + fulltext
 // ═══════════════════════════════════════════════════════════════════
-function enrichPrompt(dois, idx) {
+function enrichPrompt(dois, idx, topTier) {
+  const top = dois.filter(d => topTier.has(d))
   return `Ты — enrichment-агент батча #${idx}. Проверь DOI через Crossref + Unpaywall.
 
 DOI батча (${dois.length}):
-${dois.map(d => `- ${d}`).join('\n')}
+${dois.map(d => `- ${d}${topTier.has(d) ? '  [ТОП-ТИР]' : ''}`).join('\n')}
 
 Для каждого DOI через Bash curl (ПОСЛЕДОВАТЕЛЬНО, polite pool):
 1. Crossref: \`curl -s "https://api.crossref.org/works/{DOI}?mailto=\${CROSSREF_MAILTO}" -H "User-Agent: search-paper/1.0 (mailto:\${CROSSREF_MAILTO})"\`
    - crossrefVerified: DOI резолвится (HTTP 200, message есть).
-   - isRetracted: ИСТИНА, если ЛЮБОЙ из сигналов (проверяй ВСЕ три — одного update-to НЕДОСТАТОЧНО):
+   - isRetracted: ИСТИНА, если сработал ЛЮБОЙ сигнал (проверяй ВСЕ три ниже — одного update-to НЕДОСТАТОЧНО; четвёртый сигнал — в пункте 3, только для топ-тира):
      (a) \`message.updated-by[]\` содержит элемент с \`type == "retraction"\` — ОСНОВНОЙ сигнал отозванной статьи (ставит retractionDate = его updated.date-parts);
      (b) title начинается с "RETRACTED", "Retracted:", "WITHDRAWN" — вторичный сигнал (напр. Wakefield 1998: title "RETRACTED: …", updated-by[].type=="retraction");
      (c) \`message.update-to[].type == "retraction"\` — означает, что САМ этот DOI является уведомлением об отзыве (тоже исключаем из доказательной базы).
      Пример: DOI 10.1016/S0140-6736(97)11096-0 → isRetracted=true (через updated-by + title-префикс).
    - industryFunded: \`message.funder[].name\` содержит pharma/biotech (Pfizer, Novartis, Bayer, Merck, GSK, Roche, AbbVie, Sanofi, биотех-вендоры и т.п.).
-   - titleMatch (ANTI-HALLUCINATION): сверь title из Crossref с заявленным title статьи — совпадает (с точностью до регистра/пунктуации/года)? Если расходится или DOI не резолвится → titleMatch=false (статья «unverified»).
+   - ANTI-HALLUCINATION — сверка ТРЁХ полей с тем, что заявил source-агент:
+     • titleMatch: title из Crossref (\`message.title[0]\`) совпадает с заявленным — с точностью до регистра, пунктуации и пробелов? Расходится по смыслу или DOI не резолвится → titleMatch=false (статья «unverified»).
+     • yearMatch: год Crossref (\`message.issued.date-parts[0][0]\`, при отсутствии — \`message.published.date-parts[0][0]\`) против заявленного года. **Допуск ±1** — online-first и печатный номер законно расходятся на год. Разница ≥2 → false. Года нет у статьи ИЛИ нет в Crossref → null (не false).
+     • authorMatch: фамилия ПЕРВОГО автора (\`message.author[0].family\`) против заявленного первого автора. Сравнивай без учёта регистра и диакритики (Müller = Muller = MULLER, Łopez = Lopez); дефисные и двойные фамилии — совпадение по любой части. Автора нет у статьи ИЛИ нет в Crossref → null (не false).
    Rate limit: 10 RPS polite (gap ~100ms). HTTP 429 → backoff 1s/2s/4s, max 3.
 2. Unpaywall: \`curl -s "https://api.unpaywall.org/v2/{DOI}?email=\${UNPAYWALL_EMAIL}"\`
    - isOA, oaStatus (gold/hybrid/bronze/green/closed), oaPdfUrl = best_oa_location.url_for_pdf.
-
+${top.length ? `3. ЧЕТВЁРТЫЙ СИГНАЛ РЕТРАКЦИИ — ТОЛЬКО для ${top.length} DOI, помеченных [ТОП-ТИР] выше. Остальные DOI батча этим запросом НЕ проверяй.
+   \`curl -s "https://api.crossref.org/works?filter=updates:{DOI},update-type:retraction&rows=1&mailto=\${CROSSREF_MAILTO}" -H "User-Agent: search-paper/1.0 (mailto:\${CROSSREF_MAILTO})"\`
+   - \`message.total-results > 0\` → существует уведомление об отзыве, указывающее НА ЭТОТ DOI → isRetracted=true, даже если в самой записи статьи нет \`updated-by\`. retractionDate = \`message.items[0].update-to[0].updated.date-parts\`.
+   - \`total-results == 0\` → сигнал чист; на три предыдущих сигнала это никак не влияет.
+   - Проверено 21.09.2026 на DOI 10.1177/1758835919874651: total-results=1, уведомление 10.1177/17588359211061903, \`update-to[0].source = "retraction-watch"\`.
+   - ЭТО LIST-ЗАПРОС: polite pool даёт 3 RPS, а не 10 → gap ≥350 мс, строго последовательно. Ради этого лимита сигнал и ограничен топ-тиром: гонять его по всему батчу значило бы удвоить число запросов при том же улове.
+` : `3. ЧЕТВЁРТЫЙ СИГНАЛ РЕТРАКЦИИ (Crossref \`filter=updates:…\`) в этом батче не запускается: DOI из топ-тира здесь нет.
+`}
 Запиши дамп в ${WORK_DIR}/enrich_${idx}.md.
 Верни строго по схеме ENRICH_BATCH_SCHEMA: batchIndex=${idx}, items[] (по одному ENRICH_ITEM на DOI), fileWritten.
 ${NO_HALLUCINATION} НЕ выдумывай поля — если curl не вернул, ставь false/null.`
@@ -474,7 +548,16 @@ PLUGIN_ROOT = ${PLUGIN_ROOT}
 ЗАДАЧА:
 1. Получи fulltext — маршрут по типу ссылки:
    - **PDF** (URL оканчивается на .pdf, arXiv /pdf/, любой OA-PDF-locus): ТОЛЬКО \`bash ${PLUGIN_ROOT}/scripts/pdf-fetch.sh "<url>"\` через Bash → скрипт печатает путь к текстовому файлу → прочитай его через Read. Это 0 кредитов. PDF через firecrawl ЗАПРЕЩЁН — PreToolUse-хук плагина (block-pdf-firecrawl.py) его deny-ит, а постраничный парсинг сжигает по кредиту на страницу.
-     \`exit 2\` (PDF_UNREACHABLE/PDF_EMPTY: JS-gate, скан, paywall) → возьми другой OA-locus из enrich-файлов; если и он не открылся — extracted=false.
+     \`exit 2\` (PDF_UNREACHABLE/PDF_EMPTY: JS-gate, скан, paywall) → лестница локусов:
+     a) другой OA-locus из enrich-файлов (Unpaywall \`oa_locations[]\`) → снова pdf-fetch.sh;
+     b) и он не открылся → **CORE**: у репозиториев часто лежит открытая копия там, где Unpaywall пусто. Один запрос по DOI:
+        \`\`\`bash
+        eval "$(bash ${PLUGIN_ROOT}/scripts/secret.sh --export CORE_API_KEY)"
+        curl -sL "https://api.core.ac.uk/v3/search/works/?q=doi%3A%22${(p.doi || '').replace(/"/g, '')}%22&limit=1" -H "Authorization: Bearer \${CORE_API_KEY}" | jq -r '.results[0].downloadUrl // empty'
+        \`\`\`
+        Слэш в конце \`/works/\` обязателен, \`-L\` обязателен (иначе 301 и пустота). Не читай ответ целиком — \`fullText\` в выдаче CORE весит 80–180 тыс. символов; бери только \`downloadUrl\` через jq.
+        Непустой \`downloadUrl\` → ОДИН повторный \`bash ${PLUGIN_ROOT}/scripts/pdf-fetch.sh "<downloadUrl>"\`.
+     c) пусто / ключа нет / снова exit 2 → extracted=false, дальше не пробуй.
    - **HTML-страница** (журнальная страница, PMC, блог): \`defuddle parse "{url}" --md\` через Bash, при неудаче — firecrawl_scrape (загрузи через ToolSearch). waitFor 5000 только для динамики.
 2. Извлеки ТОЛЬКО structured summary (≤1K токенов): methods (1-2 предл.), sample_size (N + популяция), inclusion_criteria (2-3), results_primary (1 абзац), limitations (3), conflict_of_interest (дословно), rob_signals (blinding/ITT/allocation concealment/pre-registration).
 3. numbersVerbatim[]: для КАЖДОГО числа, которое может попасть в отчёт (N, эффект, CI, p, доза, длительность), верни объект {field, value, quote}, где quote — ДОСЛОВНЫЙ фрагмент из статьи на языке оригинала (≤300 символов, без перевода и без пересказа), содержащий это число. Числа без дословного locator не возвращай. Чисел нет или fulltext недоступен → пустой массив [].
@@ -490,7 +573,7 @@ ${TOOL_NOTE}
 // ═══════════════════════════════════════════════════════════════════
 function synthPrompt(allFiles, enrichItems, papersTotal, addedBySnowball, aiModel) {
   const retracted = enrichItems.filter(e => e.isRetracted).map(e => e.doi)
-  const unverified = enrichItems.filter(e => e.crossrefVerified && !e.titleMatch).map(e => e.doi)
+  const unverified = enrichItems.filter(isUnverifiedItem).map(e => e.doi)
   return `Ты — научный аналитик-синтезатор. Из сырья источников + enrich + fulltext построй ДОКАЗАТЕЛЬНЫЙ отчёт в формате DECISION-FIRST: читатель видит выводы/действия/кому верить; процесс (GRADE-таблица, Evidence Table, ссылки) — в свёрнутых [!note]- в конце.
 
 ЗАПРОС (RU): ${QUERY_RU}
@@ -510,7 +593,7 @@ ${allFiles.map(f => `- ${f}`).join('\n')}
 
 ENRICHMENT-ФЛАГИ:
 - ОТОЗВАННЫЕ (исключить из выводов и Evidence Table, перечислить в retractedExcluded): ${JSON.stringify(retracted)}
-- UNVERIFIED (titleMatch=false → НЕ в Evidence Table без явной пометки «не верифицировано»): ${JSON.stringify(unverified)}
+- UNVERIFIED (Crossref не подтвердил привязку статьи к DOI: либо titleMatch=false, либо titleMatch=true при разошедшихся ОДНОВРЕМЕННО годе и фамилии первого автора → НЕ в Evidence Table без явной пометки «не верифицировано»; в выводы такие статьи не берём): ${JSON.stringify(unverified)}
 
 МЕТОДОЛОГИЯ СИНТЕЗА (процесс в отчёт НЕ пишется, только его итог):
 1. Dedup: DOI→fuzzy title→authors+year. sources[] = все источники статьи.
@@ -663,8 +746,15 @@ function dedupePapers(list) {
 }
 const uniquePapersRaw = dedupePapers(rawPapers)
 // Телеметрия капов: усечение fan-out'а по PAPER_CAP фиксируем отдельно от усечения snowball'а.
-const capHitFanout = uniquePapersRaw.length > PAPER_CAP
-let allPapers = uniquePapersRaw.slice(0, PAPER_CAP)
+// Записи реестра испытаний и страницы экспертных сайтов — не статьи: у них нет DOI/цитирований, snowball и
+// enrich их не трогают. Под потолок они не идут, иначе съедают места добора по цитированиям — самой точной
+// части корпуса (замер 21.09.2026: точность fan-out 11%, cocite 22%, chase 30–35%; ct+w занимали 53 места из 240).
+const SIDE_SRC = new Set([ALL_SOURCES.clinicaltrials.prefix, ALL_SOURCES.webExperts.prefix])
+const isSide = p => (p._srcs || [p._src]).every(x => SIDE_SRC.has(x))
+const sidePapers = uniquePapersRaw.filter(isSide)
+const mainPapersRaw = uniquePapersRaw.filter(p => !isSide(p))
+const capHitFanout = mainPapersRaw.length > PAPER_CAP
+let allPapers = mainPapersRaw.slice(0, PAPER_CAP)
 let capHitSnowball = false
 let stoppedBy = 'noHubs'
 log(`Дедуп fan-out: ${rawPapers.length} rawPapers → ${uniquePapersRaw.length} unique${capHitFanout ? ` (усечено до PAPER_CAP=${PAPER_CAP})` : ''}.`)
@@ -675,6 +765,15 @@ if (sourcesAnswered < MIN_SOURCES) {
   return { workDir: WORK_DIR, status: 'insufficient-sources', sourcesAnswered, runSources, files: sourceFiles, searchResults, papersTotal: allPapers.length }
 }
 
+// Термины темы для scripts/chase.py: метки и синонимы концептов из плана запросов, иначе слова QUERY_EN.
+// Запятая — разделитель аргумента, кавычки ломают shell-строку — вычищаем оба.
+const CHASE_STOP = new Set(['with', 'from', 'that', 'this', 'their', 'which', 'adults', 'adult', 'effect', 'effects', 'efficacy', 'relative', 'combination', 'versus', 'among', 'between'])
+const CHASE_TERMS = (() => {
+  const fromPlan = ((plan && plan.concepts) || []).flatMap(c => [c.label, ...(c.synonyms || [])])
+  const raw = fromPlan.length ? fromPlan : QUERY_EN.split(/[^A-Za-z0-9-]+/).filter(t => t.length > 3 && !CHASE_STOP.has(t.toLowerCase()))
+  return [...new Set(raw.map(t => String(t || '').toLowerCase().replace(/[",`$\\]/g, ' ').trim()).filter(t => t.length > 2))].slice(0, 24).join(',')
+})()
+
 // ── Phase Snowball (dedup → ≤2 итерации hub-chasing с saturation-гейтами) ──
 phase('Snowball')
 const dedup = await agent(dedupPrompt(sourceFiles), w({ label: 'dedup', phase: 'Snowball', schema: SNOWBALL_DEDUP }))
@@ -682,9 +781,40 @@ const seen = new Set((dedup?.seenKeys || []).map(k => k.toLowerCase()))
 // подстрахуем seenKeys ключами из allPapers (на случай, если dedup-агент вернул не всё)
 for (const p of allPapers) { const k = paperKey(p); if (k) seen.add(k.toLowerCase()) }
 let canonicalCount = Math.max(dedup?.canonicalCount || 0, seen.size)
+// doi нормализуем здесь: агент может вернуть его в форме https://doi.org/… , а OpenCitations
+// ждёт голый `doi:10.x/y`.
 let hubs = (dedup?.hubs || []).filter(h => h.externalId).slice(0, HUB_CAP)
+  .map(h => ({ ...h, doi: normDoi(h.doi) || null }))
 let addedBySnowball = 0
 let saturation = dedup?.saturationEstimate ?? 0
+
+// ── Co-citation prefilter: детерминированный backward-добор ДО агентов-чейсеров ──
+// Обзоры/мета-анализы корпуса → их списки литературы → работы, на которые ссылаются ≥2 из них.
+// Замер 21.09.2026 (две темы, эталон — списки литературы отложенных SR): случайная backward-ссылка
+// попадает в эталон в 3–6% случаев, общая для ≥2 обзоров — в 20–40%, для ≥3 — в 46–56%.
+// Один агент, один скрипт, ~1 запрос OpenAlex на обзор; чейсерам ниже остаётся forward и хвост.
+const snowballFiles = []   // дампы чейсеров для синтеза (snowball_{tag}.md)
+let addedByCocite = 0
+const reviewHubs = allPapers
+  .filter(p => REVIEW_TYPES.includes(p.studyType) && (/^W\d+$/i.test(p.externalId || '') || normDoi(p.doi)))
+  .sort((a, b) => (b.citations || 0) - (a.citations || 0))
+  .slice(0, COCITE_HUB_CAP)
+  .map(p => /^W\d+$/i.test(p.externalId || '') ? p.externalId : normDoi(p.doi))
+if (COCITE && reviewHubs.length >= 2 && allPapers.length < PAPER_CAP) {
+  const room = Math.min(COCITE_MAX, PAPER_CAP - allPapers.length)
+  const co = await agent(cocitePrompt(reviewHubs, [...seen].filter(k => /^10\./.test(k)), room),
+    w({ label: 'cocite', phase: 'Snowball', schema: SNOWBALL_RESULT }))
+  for (const p of (co?.addedPapers || [])) {
+    const k = paperKey(p).toLowerCase()
+    if (!k || seen.has(k) || allPapers.length >= PAPER_CAP) continue
+    seen.add(k); allPapers.push({ ...p, _src: 'cc', _srcs: ['cc'] }); addedByCocite++
+  }
+  canonicalCount += addedByCocite
+  addedBySnowball += addedByCocite
+  log(`Co-citation: ${reviewHubs.length} обзоров-hub-ов → +${addedByCocite} статей (${co?.note || 'нет note'}). Корпус ${allPapers.length}.`)
+} else {
+  log(`Co-citation пропущен: обзоров с id ${reviewHubs.length} (<2), либо корпус у потолка, либо cocite:false.`)
+}
 
 for (let iter = 0; iter < MAX_SNOWBALL_ITERS; iter++) {
   if (!hubs.length) { stoppedBy = 'noHubs'; log(`Snowball iter ${iter}: нет hub-ов — стоп.`); break }
@@ -696,16 +826,18 @@ for (let iter = 0; iter < MAX_SNOWBALL_ITERS; iter++) {
   const chased = (await parallel(hubs.map(h => () =>
     agent(chasePrompt(h, seenArr), w({ label: `chase:${h.externalId}`.slice(0, 40), phase: 'Snowball', schema: SNOWBALL_RESULT }))
   ))).filter(Boolean)
+  for (const h of hubs) { const r = chased.find(c => c.hubId === h.externalId); if (r && (r.addedPapers || []).length) snowballFiles.push(`${WORK_DIR}/snowball_${chaseTag(h)}.md`) }
 
   // JS-дедуп новых статей против seen + между hub-ами
   const fresh = []
   for (const r of chased) for (const p of (r.addedPapers || [])) {
     const k = paperKey(p).toLowerCase()
     if (!k || seen.has(k)) continue
-    seen.add(k); fresh.push({ ...p, _src: p.prefix || 'sn' }); if (allPapers.length + fresh.length >= PAPER_CAP) { capHitSnowball = true; break }
+    seen.add(k); fresh.push({ ...p, _src: 'sn', _srcs: ['sn'] });   // было p.prefix: в телеметрии источников вместо 'sn' копились '[oa2]', '[oa3]'… if (allPapers.length + fresh.length >= PAPER_CAP) { capHitSnowball = true; break }
   }
-  const newUnique = fresh.length
+  const before = allPapers.length
   allPapers = allPapers.concat(fresh).slice(0, PAPER_CAP)
+  const newUnique = allPapers.length - before   // было fresh.length: счётчик завышался, когда потолок отрезал хвост
   addedBySnowball += newUnique
   const ratio = canonicalCount > 0 ? newUnique / canonicalCount : 0
   canonicalCount += newUnique
@@ -715,27 +847,64 @@ for (let iter = 0; iter < MAX_SNOWBALL_ITERS; iter++) {
   if (ratio < SATURATION_THRESHOLD) { stoppedBy = 'saturation'; log(`Snowball: насыщение (ratio<${SATURATION_THRESHOLD}) — стоп.`); break }
   // hubs для следующей итерации: топ свежих статей с externalId по цитированиям (JS, без агента)
   hubs = fresh.filter(p => p.externalId).sort((a, b) => (b.citations || 0) - (a.citations || 0)).slice(0, HUB_CAP)
-    .map(p => ({ externalId: p.externalId, api: /^W\d/i.test(p.externalId) ? 'openalex' : 's2', title: p.title, reason: 'snowball frontier' }))
+    // doi прокидываем всегда: без него у chase-агента нет третьей ступени (OpenCitations по DOI).
+    .map(p => ({ externalId: p.externalId, api: /^W\d/i.test(p.externalId) ? 'openalex' : 's2', doi: normDoi(p.doi) || null, title: p.title, reason: 'snowball frontier' }))
 }
+allPapers = allPapers.concat(sidePapers)   // возвращаем побочные записи: синтезу они нужны, потолку — нет
 log(`Snowball завершён: +${addedBySnowball} статей, корпус ${allPapers.length}, saturation≈${saturation.toFixed(2)}, stoppedBy=${stoppedBy}, capHitFanout=${capHitFanout}, capHitSnowball=${capHitSnowball}`)
+
+const capStats = {
+  stoppedBy,               // noHubs | cap | budget | saturation | iters
+  capHitFanout,            // PAPER_CAP усёк корпус сразу после fan-out
+  capHitSnowball,          // PAPER_CAP усёк добор snowball'а
+  rawPapers: rawPapers.length,
+  uniquePapers: uniquePapersRaw.length,
+  paperCap: PAPER_CAP,
+  sideRecords: sidePapers.length,   // записи реестра/экспертные страницы — вне потолка
+  perSourceTop: PER_SOURCE_TOP,
+  addedByCocite,           // из них co-citation-шаг (scripts/cocite.py), остальное — чейсеры
+}
+
+if (CORPUS_ONLY) {
+  log('corpusOnly: корпус собран, enrich/синтез/критик пропущены.')
+  return {
+    workDir: WORK_DIR, status: 'corpus-only', sourcesAnswered, runSources, files: sourceFiles,
+    papersTotal: allPapers.length, addedBySnowball, saturation, capStats,
+    corpus: allPapers.map(p => ({ doi: normDoi(p.doi) || null, pmid: p.pmid || null, title: p.title, year: p.year || null, srcs: p._srcs || [p._src] })),
+  }
+}
 
 // ── Phase Enrich (pipeline по батчам DOI: Crossref+Unpaywall, затем fulltext top-OA) ──
 phase('Enrich')
 const allDois = [...new Set(allPapers.map(p => normDoi(p.doi)).filter(Boolean))]
 const doiBatches = chunk(allDois, ENRICH_BATCH)
-log(`Enrich: ${allDois.length} уникальных DOI → ${doiBatches.length} батчей по ≤${ENRICH_BATCH}.`)
+
+// Топ-тир — для четвёртого сигнала ретракции (Crossref `filter=updates:{DOI}`). Это list-запрос:
+// 3 RPS polite вместо 10, то есть по всему корпусу он удвоил бы число запросов ради единиц находок.
+// Критерий: мета/SR/RCT ИЛИ верхняя треть корпуса по цитированиям.
+const TOP_TIER_TYPES = new Set(['meta-analysis', 'systematic-review', 'rct'])
+const citesSorted = allPapers.map(p => p.citations || 0).sort((a, b) => a - b)
+const citesCut = citesSorted.length ? citesSorted[Math.floor(citesSorted.length * 2 / 3)] : 0
+const topTierDois = new Set()
+for (const p of allPapers) {
+  const d = normDoi(p.doi)
+  if (d && (TOP_TIER_TYPES.has(p.studyType) || (p.citations || 0) >= citesCut)) topTierDois.add(d)
+}
+log(`Enrich: ${allDois.length} уникальных DOI → ${doiBatches.length} батчей по ≤${ENRICH_BATCH}; топ-тир для 4-го сигнала ретракции: ${topTierDois.size}.`)
 
 let enrichItems = []
 if (doiBatches.length) {
   const enrichBatches = (await pipeline(
     doiBatches.map((b, i) => ({ dois: b, idx: i })),
-    b => agent(enrichPrompt(b.dois, b.idx), w({ label: `enrich:${b.idx}`, phase: 'Enrich', schema: ENRICH_BATCH_SCHEMA })),
+    b => agent(enrichPrompt(b.dois, b.idx, topTierDois), w({ label: `enrich:${b.idx}`, phase: 'Enrich', schema: ENRICH_BATCH_SCHEMA })),
   )).filter(Boolean)
   enrichItems = enrichBatches.flatMap(b => b.items || [])
 }
 const retractedCount = enrichItems.filter(e => e.isRetracted).length
-const unverifiedCount = enrichItems.filter(e => e.crossrefVerified && !e.titleMatch).length
-log(`Enrich: проверено ${enrichItems.length} DOI — retracted=${retractedCount}, unverified(titleMatch=false)=${unverifiedCount}.`)
+const unverified = enrichItems.filter(isUnverifiedItem)
+const unverifiedCount = unverified.length
+const unverifiedByMeta = unverified.filter(e => e.titleMatch).length
+log(`Enrich: проверено ${enrichItems.length} DOI — retracted=${retractedCount}, unverified=${unverifiedCount} (из них titleMatch=true, но год+автор разошлись: ${unverifiedByMeta}).`)
 
 // fulltext top-OA (budget-gated): titleMatch=true, не retracted, isOA
 let fulltextResults = []
@@ -743,7 +912,9 @@ if (budget.remaining() >= FULLTEXT_BUDGET_FLOOR) {
   const enrichByDoi = new Map(enrichItems.map(e => [e.doi, e]))
   const oaCandidates = allPapers
     .map(p => ({ p, e: enrichByDoi.get(normDoi(p.doi)) }))
-    .filter(({ p, e }) => (p.isOA || (e && e.isOA)) && (!e || (!e.isRetracted && e.titleMatch !== false)) && normDoi(p.doi))
+    // titleMatch !== false оставлено как было; isUnverifiedItem добавляет второй случай
+    // (год+автор разошлись) — тянуть fulltext под чужой DOI смысла нет.
+    .filter(({ p, e }) => (p.isOA || (e && e.isOA)) && (!e || (!e.isRetracted && e.titleMatch !== false && !isUnverifiedItem(e))) && normDoi(p.doi))
     .sort((a, b) => (b.p.citations || 0) - (a.p.citations || 0))
   const seenOa = new Set(); const topOa = []
   for (const { p, e } of oaCandidates) { const k = normDoi(p.doi); if (seenOa.has(k)) continue; seenOa.add(k); topOa.push({ ...p, oaUrl: p.oaUrl || (e && e.oaPdfUrl) || null }); if (topOa.length >= FULLTEXT_CAP) break }
@@ -761,7 +932,8 @@ const fulltextFiles = fulltextResults.map(r => r.fileWritten).filter(Boolean)
 // ── Phase Synthesize ──
 phase('Synthesize')
 const enrichFiles = doiBatches.map((_, i) => `${WORK_DIR}/enrich_${i}.md`)
-const synthFiles = [...sourceFiles, `${WORK_DIR}/_seed.md`, ...enrichFiles, ...fulltextFiles]
+// cocite.md — единственный файл, где у co-cited статей есть заголовки и число цитирующих обзоров.
+const synthFiles = [...sourceFiles, `${WORK_DIR}/_seed.md`, ...(addedByCocite ? [`${WORK_DIR}/cocite.md`] : []), ...snowballFiles, ...enrichFiles, ...fulltextFiles]
 // Опции собираются явно, НЕ через w(): переданный вызывающим workerOpts.model пережил бы
 // слияние и побил frontmatter агента (per-invocation модель приоритетнее).
 const synthOpts = (label, agentType) => ({ label, phase: 'Synthesize', schema: SYNTH, agentType })
@@ -817,14 +989,7 @@ return {
   addedBySnowball,
   saturation,
   enrich: { checked: enrichItems.length, retracted: retractedCount, unverified: unverifiedCount },
-  capStats: {
-    stoppedBy,               // noHubs | cap | budget | saturation | iters
-    capHitFanout,            // PAPER_CAP усёк корпус сразу после fan-out
-    capHitSnowball,          // PAPER_CAP усёк добор snowball'а
-    rawPapers: rawPapers.length,
-    uniquePapers: uniquePapersRaw.length,
-    paperCap: PAPER_CAP,
-  },
+  capStats,
   aiModelActual,
   reportPath,
   queryRu: synth?.queryRu || QUERY_RU,

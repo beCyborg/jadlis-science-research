@@ -70,7 +70,7 @@ arXiv имеет rate limit 1 req / 3 сек. При ошибке:
 
 **SIZE CAP: ≤ 20KB (~300 строк)**
 Per paper: metadata + 1 sentence Contrib. No full abstracts.
->20 papers → composite TOP-20 (citations + recency), rest compressed.
+>LIMIT papers → composite TOP-LIMIT (citations + recency), rest compressed. LIMIT задаёт ядро в промпте агента (дефолт 30); число 20 в примерах ниже и выше — только иллюстрация.
 
 ```markdown
 # arXiv — результаты по "{REFINED_QUERY_EN}"

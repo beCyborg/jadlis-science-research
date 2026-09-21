@@ -18,7 +18,7 @@ effort: high
 # /science-research — научный литературный обзор (гибрид Skill + Workflow)
 Перед Phase A прочитать `references/gotchas.md` — ловушки прогона (прямой вызов ядра не пишет в vault, частичный `fix`, чтение чисел из фигур PDF).
 
-Тяжёлая часть (query-builder → fan-out по 9 источникам → citation snowballing →
+Тяжёлая часть (query-builder → fan-out по 10 источникам → citation snowballing →
 Crossref/Unpaywall enrich с retraction- и anti-hallucination-проверкой → GRADE-синтез →
 adversarial critic → fix) исполняется детерминированным workflow **`search-paper-core`**.
 Скилл делает интерактивный intake (Phase A: recon + decision-first интервью + опц.
@@ -158,6 +158,18 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
 2a. **Постпроверка draft — честный `ai_model`.** Сверь frontmatter `ai_model` с `aiModelActual`
    из объекта workflow. В норме они совпадают; расхождение означает, что synth на Fable ушёл
    в ретрай на Opus — поправь строку на `ai_model: "{aiModelActual}"` перед записью в vault.
+
+2b. **Телеметрия капов — во frontmatter.** Допиши в frontmatter draft поля из `capStats`
+   (резюме в чате не переживает сессию, а без этих чисел не понять, связывает ли выборку потолок):
+   ```yaml
+   stopped_by: "{capStats.stoppedBy}"        # noHubs | cap | budget | saturation | iters
+   papers_raw: {capStats.rawPapers}           # сырых записей от всех источников
+   papers_unique: {capStats.uniquePapers}     # после JS-дедупа, ДО усечения по потолку
+   paper_cap: {capStats.paperCap}
+   cap_hit_fanout: {capStats.capHitFanout}
+   cap_hit_snowball: {capStats.capHitSnowball}
+   ```
+   `papers_unique` > `paper_cap` означает, что часть найденного отрезана ещё до snowball.
 
 3. **Pre-write dedup (obsidian).** Через Bash (если Obsidian открыт; иначе CLI-шаги пропусти):
    ```bash
