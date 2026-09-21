@@ -20,5 +20,8 @@ def test_every_prompt_renders_offline():
     assert r.returncode == 0, r.stdout + r.stderr
     assert "RUN OK status=ok" in r.stdout, r.stdout
     assert "BROKEN_TEMPLATES=none" in r.stdout, r.stdout
+    # the prompt contract: subquestion queries reach the source agent in ONE script call, the
+    # synthesizer is pointed at plain-language.md, the fix agent stops stamping [AR-fix]
+    assert "PROMPT_CONTRACT=ok" in r.stdout, r.stdout
     for stage in ("query", "core", "dedup", "cocite", "chase", "enrich", "fulltext", "synth", "adversarial", "fix"):
         assert f"  {stage}: rendered" in r.stdout, r.stdout

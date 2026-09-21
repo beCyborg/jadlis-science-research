@@ -25,6 +25,13 @@ python3 "{PLUGIN_ROOT}/scripts/source-fetch.py" openalex --query '{REFINED_QUERY
 externalId` (`Wxxxxxxxxx` — нужен для чейсинга), `year, pubTypes[], citations, influentialCitations,
 fwci, isOA, oaUrl, abstract` (≤1500 знаков), `pass`. Чего API не отдал — `null`.
 
+**Несколько запросов за один вызов.** Ядро даёт источнику основной запрос плюс короткие запросы по
+подтемам. Все они исполняются ОДНИМ вызовом — иначе каждый запрос стоит отдельного хода агента:
+заменяй `--query '…'` на `--queries-file "{WORK_DIR}/_queries_openalex.json"` (JSON-список строк, первая
+= основной запрос). Бюджет на запрос — `max(8, LIMIT / число запросов)`; в выводе появляется
+`queries[]` с `total` и `kept` по каждому, у статьи — `queryIndex`. Статью из доп. запроса не
+выбрасывай за то, что её нет в основном: она и есть добор по подтеме.
+
 **Правило:** `exit 2` / `apiStatus=unavailable` → ручной путь ниже и его обработка ошибок
 (у OpenAlex Brave-фоллбэка нет — пишем `## OpenAlex UNAVAILABLE`); иначе ручные `curl` НЕ нужны.
 

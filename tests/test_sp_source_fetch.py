@@ -3,6 +3,7 @@ wired into the protocols, and keep its normalization honest. Network is never to
 every check feeds the pure functions an inline fixture.
 """
 
+import argparse
 import ast
 import importlib.util
 import pathlib
@@ -222,6 +223,106 @@ def test_envelope_marks_truncation_from_the_api_hit_count():
     assert m.envelope("pubmed", "ok", [{"title": "x"}], total=207)["truncated"] is True
     assert m.envelope("pubmed", "ok", [{"title": "x"}], total=1)["truncated"] is False
     assert m.envelope("pubmed", "empty", [], total=0)["truncated"] is False
+
+
+def test_pubmed_quotas_are_half_quarter_quarter():
+    m = load()
+    # evidence : observational : general = 1/2 : 1/4 : 1/4 — the observational pass exists because
+    # the evidence filter used to take 2/3 of the slots and cohorts fought for the remaining third
+    assert m.pubmed_quotas(40) == (20, 10, 10)
+    assert sum(m.pubmed_quotas(40)) == 40
+    assert sum(m.pubmed_quotas(30)) == 30
+    # never zero, whatever the limit
+    assert all(q >= 1 for q in m.pubmed_quotas(1))
+    assert all(q >= 1 for q in m.pubmed_quotas(4))
+
+
+def test_pubmed_plan_carries_three_passes_with_the_right_filters():
+    m = load()
+    src = SCRIPT.read_text(encoding="utf-8")
+    assert "observational study[pt]" in m.OBS_FILTER and "cohort studies[mh]" in m.OBS_FILTER
+    assert "case-control studies[mh]" in m.OBS_FILTER and "cross-sectional studies[mh]" in m.OBS_FILTER
+    body = src.split("def fetch_pubmed")[1].split("\ndef ")[0]
+    assert '("evidence"' in body and '("observational"' in body and '("general"' in body
+    assert "pubmed_quotas(a.limit)" in body
+
+
+def test_per_query_limit_has_a_floor_of_eight():
+    m = load()
+    assert m.per_query_limit(40, 1) == 40      # one query → the whole budget, as before
+    assert m.per_query_limit(40, 4) == 10
+    assert m.per_query_limit(40, 7) == 8       # floor: below 8 a narrow query returns noise only
+    assert m.per_query_limit(5, 3) == 8
+
+
+def test_load_queries_keeps_order_and_dedupes():
+    m = load()
+    assert m.load_queries(["a", "a", "b"], None) == ["a", "b"]
+    assert m.load_queries(["  ", "x"], None) == ["x"]
+    assert m.load_queries([], None) == []
+
+
+def test_load_queries_reads_both_file_shapes(tmp_path):
+    m = load()
+    plain = tmp_path / "q1.json"
+    plain.write_text('["main", "extra"]', encoding="utf-8")
+    assert m.load_queries([], str(plain)) == ["main", "extra"]
+    objs = tmp_path / "q2.json"
+    objs.write_text('[{"query": "main", "key": "pubmed:main"}, {"query": "sub"}]', encoding="utf-8")
+    assert m.load_queries([], str(objs)) == ["main", "sub"]
+    # the --query ones come first: the source's MAIN query must keep its ranking after dedup
+    assert m.load_queries(["main"], str(objs)) == ["main", "sub"]
+
+
+def test_run_queries_merges_dedupes_and_records_per_query_numbers(monkeypatch):
+    m = load()
+    calls = []
+
+    def fake(a):
+        calls.append((a.query, a.limit))
+        if a.query == "dead":
+            return m.envelope("fake", "unavailable", note="down"), 2
+        rows = [m.paper("A", doi="10.1/a"), m.paper("B", doi="10.1/" + a.query)]
+        return m.envelope("fake", "ok", rows, total=100 + len(a.query)), 0
+
+    monkeypatch.setitem(m.SOURCES, "pubmed", fake)
+    args = argparse.Namespace(query="main", limit=40, year_from=None, preprints=False, out=None)
+    out, code = m.run_queries("pubmed", args, ["main", "sub", "dead"])
+    assert code == 0
+    assert [q[1] for q in calls] == [13, 13, 13]           # max(8, 40 // 3)
+    # the shared paper 10.1/a is kept once, in the order the main query returned it
+    assert [p["doi"] for p in out["papers"]] == ["10.1/a", "10.1/main", "10.1/sub"]
+    assert [p["queryIndex"] for p in out["papers"]] == [0, 0, 1]
+    per = {q["index"]: q for q in out["queries"]}
+    assert per[0]["kept"] == 2 and per[1]["kept"] == 1
+    assert per[2]["apiStatus"] == "unavailable" and per[2]["kept"] == 0
+    assert out["total"] == 104                             # total belongs to the MAIN query
+    assert out["apiStatus"] == "ok"                        # one dead extra query never sinks the run
+
+
+def test_run_queries_reports_unavailable_only_when_every_query_failed(monkeypatch):
+    m = load()
+    monkeypatch.setitem(m.SOURCES, "s2", lambda a: (m.envelope("s2", "unavailable", note="down"), 2))
+    args = argparse.Namespace(query="a", limit=30, year_from=None, preprints=False, out=None)
+    out, code = m.run_queries("s2", args, ["a", "b"])
+    assert code == 2 and out["apiStatus"] == "unavailable"
+    assert len(out["queries"]) == 2
+
+
+def test_single_query_behaves_exactly_as_before(monkeypatch):
+    m = load()
+    seen = []
+
+    def fake(a):
+        seen.append(a.limit)
+        return m.envelope("europe-pmc", "ok", [m.paper("A", doi="10.1/a")], total=7), 0
+
+    monkeypatch.setitem(m.SOURCES, "europepmc", fake)
+    args = argparse.Namespace(query="q", limit=40, year_from=None, preprints=False, out=None)
+    out, code = m.run_queries("europepmc", args, ["q"])
+    assert seen == [40] and code == 0
+    assert out["source"] == "europe-pmc"   # the fetcher's own label survives, not the subcommand
+    assert out["total"] == 7 and len(out["papers"]) == 1
 
 
 def test_keys_are_never_printed():

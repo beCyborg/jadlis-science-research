@@ -164,12 +164,20 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    ```yaml
    stopped_by: "{capStats.stoppedBy}"        # noHubs | cap | budget | saturation | iters
    papers_raw: {capStats.rawPapers}           # сырых записей от всех источников
-   papers_unique: {capStats.uniquePapers}     # после JS-дедупа, ДО усечения по потолку
+   papers_unique: {capStats.uniquePapers}     # после JS-дедупа, ДО обрезки по потолку
    paper_cap: {capStats.paperCap}
    cap_hit_fanout: {capStats.capHitFanout}
    cap_hit_snowball: {capStats.capHitSnowball}
+   grey_lit: {capStats.greyLit}               # DOI не в Crossref, но резолвится в DataCite
+   excluded_silently: {capStats.excludedSilently}   # DOI не резолвится нигде
    ```
    `papers_unique` > `paper_cap` означает, что часть найденного отрезана ещё до snowball.
+
+   **Поля появились в разное время — старые прогоны их не имеют.** `capStats.coverage`,
+   `capStats.subquestions`, `grey_lit` и `excluded_silently` добавлены в 2.2.0; при `corpusOnly`
+   счётчики enrich остаются `null`. Отсутствует поле или равно `null` — строку просто не пиши,
+   не подставляй `0` (ноль читается как «проверили и не нашли»). `coverage` синтезатор уже
+   записал во frontmatter сам — дублировать не нужно; его нет — значит, прогон был без подтем.
 
 3. **Pre-write dedup (obsidian).** Через Bash (если Obsidian открыт; иначе CLI-шаги пропусти):
    ```bash
@@ -204,6 +212,12 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
      «остановка: `stoppedBy` · корпус: `rawPapers`→`uniquePapers` (cap `paperCap`) ·
      усечение fan-out: `capHitFanout` / snowball: `capHitSnowball`». Любой `capHit*=true`
      или `stoppedBy` ∈ {cap, budget} → добавь «часть найденного не вошла в корпус».
+   - **Покрытие подтем (`capStats.coverage`, если поле есть):** назови подтемы с 0–1 статьёй
+     одной строкой — «по этим вопросам данных почти нет: …». Это дыра в литературе или в запросе,
+     и увидеть её нужно сразу, а не при сверке с чужим отчётом.
+   - **Что не журнал (`enrich.greyLit`, если поле есть):** сколько работ пришло из DataCite
+     (отчёты ведомств, диссертации) — они в выводах с пометкой. `enrich.excludedSilently` —
+     сколько DOI не резолвились нигде и потому исключены.
    - **Модель синтеза:** `aiModelActual` — та, что сработала (Fable либо Opus 5 на ретрае).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
    - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:

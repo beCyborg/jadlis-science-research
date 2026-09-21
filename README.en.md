@@ -32,7 +32,9 @@ This is my workplace published as it is, not a product: whatever I stopped using
 | **Retracted papers.** A retracted study keeps being cited for years, and the retelling never shows it. | Answers from what was in its training data: a retraction that happened later is invisible to it. | Every DOI goes through Crossref before synthesis, checked against four retraction signals (including a reverse lookup for the retraction notice); retracted papers stay out of the conclusions and are listed separately. |
 | **Whether the reference is real.** Nothing to check it with except opening each one and comparing by hand. | The link looks genuine and leads elsewhere: the DOI and the title do not match. | Three fields are compared against Crossref — title, publication year (±1, online-first vs print) and the first author's family name; if they diverge, the paper is marked unverified and never enters the evidence table. |
 | **How much a finding weighs.** A single preprint and a systematic review weigh the same once retold. | Gives the most confident answer available and hides how uneven the underlying studies are. | Assigns GRADE per outcome, not per study type: a meta-analysis of weak trials does not become strong evidence, and "not enough data" is an answer too. |
-| **Who argues with the conclusion.** Nobody: the draft is read by whoever wrote it. | Agrees with itself and only sounds more certain when you push back. | A separate critic hunts for refutations, rechecks retraction on the key DOIs and looks at PubPeer. Key claims are cross-checked, and unchecked ones are marked. |
+| **Who argues with the conclusion.** Nobody: the draft is read by whoever wrote it. | Agrees with itself and only sounds more certain when you push back. | A separate critic hunts for refutations, rechecks retraction on the key DOIs and looks at PubPeer. Every paper the critic calls missing must be listed separately — so it reaches the report instead of being buried in the review. |
+| **A question with twelve subtopics.** You end up reading one topic at a time, and half the questions stay unanswered. | Answers the headline topic; the side questions ("what about sleep?", "caffeine instead?") are never searched for at all. | The question is first split into subquestions, and each gets its own short query to the databases. The report shows how many papers each one found: zero means a hole in the data, and it says so. |
+| **The report is written for scientists.** Labels like "g 0.34" and "OR 2.82 (95% CI …)" are left for you to decode. | Either writes the same way or drops the caveats while simplifying. | The visible part of the report is plain language: confidence in words, references as footnotes, effect size as an everyday comparison. Tables with codes and intervals stay folded at the bottom, where they are actually checked. |
 
 ## How it works
 
@@ -50,6 +52,10 @@ title check → GRADE synthesis → critic and edits → report as a file.
 
 A number reaches the report only with a verbatim quote from the paper to locate it: no quote, no
 figure — the effect is then described in words.
+
+The report reads without a glossary: "reaction gets a little faster, confidence is moderate" rather
+than "g 0.34 [em1·MODERATE]". Paper codes, GRADE and confidence intervals live in folded tables at
+the bottom — where they are actually checked.
 
 ## Install and first run
 
