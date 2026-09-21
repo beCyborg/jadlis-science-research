@@ -179,6 +179,13 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    не подставляй `0` (ноль читается как «проверили и не нашли»). `coverage` синтезатор уже
    записал во frontmatter сам — дублировать не нужно; его нет — значит, прогон был без подтем.
 
+2c. **Короткий адрес для публикации.** Допиши во frontmatter draft `permalink: <slug>`, если его ещё нет:
+   2–4 английских слова в нижнем регистре через дефис по теме отчёта (`omega3-triglycerides`), только
+   ASCII, без даты и без префикса `research`. Slug уникален в vault — проверь
+   `command grep -rIl "^permalink: <slug>$" "$VAULT_PATH"`; занят → добавь одно различающее слово.
+   Obsidian Publish берёт это свойство как адрес страницы, и кириллическое имя файла больше не
+   превращается в длинную percent-encoded ссылку.
+
 3. **Pre-write dedup (obsidian).** Через Bash (если Obsidian открыт; иначе CLI-шаги пропусти):
    ```bash
    obsidian search query="{ключевые слова QUERY_RU}" path="Знания/Ресерчи" limit=5 format=json 2>/dev/null || echo "CLI_UNAVAILABLE"

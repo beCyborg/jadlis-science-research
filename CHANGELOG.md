@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+## [2.2.1] — 2026-09-21
+
+### Для человека
+
+- Научный отчёт сразу получает короткий английский адрес для Obsidian Publish: в свойствах появляется `permalink`, и ссылка на опубликованную заметку больше не состоит из длинной закодированной кириллицы.
+
+### For agents
+
+- Changed: `skills/science-research/SKILL.md` Phase C — new step 2c adds `permalink: <slug>` (2–4 English words, ASCII, unique in the vault) to the draft frontmatter before the vault write.
+
 ## [2.2.0] — 2026-09-21
 
 ### Для человека
