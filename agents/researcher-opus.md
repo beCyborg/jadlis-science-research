@@ -1,7 +1,7 @@
 ---
 name: researcher-opus
 description: "Workflow-only researcher for full-research/search-paper-core; never invoke."
-model: claude-opus-5
+model: claude-opus-5-5
 effort: high
 ---
 

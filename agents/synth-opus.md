@@ -1,8 +1,8 @@
 ---
 name: synth-opus
-description: "Workflow-only synthesis role on Opus 5 (retry and fableBridge:false); never invoke manually."
+description: "Workflow-only synthesis role on Opus 5.5 (retry and fableBridge:false); never invoke manually."
 tools: Read, Write, Glob
-model: claude-opus-5
+model: claude-opus-5-5
 effort: high
 ---
 
