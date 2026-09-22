@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+## [2.2.2] — 2026-09-22 — Переход на Opus 5.5 / Switch to Opus 5.5
+
+### Для человека
+
+- Поиск статей, снежный ком по цитированиям, обогащение, критик и запасной синтез теперь работают на Opus 5.5 вместо Opus 5; главным синтезом по-прежнему занимается Fable 5.1.
+- В свойствах отчёта `ai_model` пишется `claude-opus-5-5`, если отчёт дописывал Opus.
+- Плагин требует Claude Code ≥ 2.1.280: более старые версии не знают новую модель.
+
+### For agents
+
+- Changed: model `claude-opus-5` → `claude-opus-5-5` (Opus 5.5, 1M context native, no `[1m]` suffix) in `agents/researcher-opus.md`, `agents/synth-opus.md` (frontmatter `model:` + description), `skills/science-research/SKILL.md` (frontmatter `model:`), `workflows/search-paper-core.js` (`AI_MODEL`, `AI_MODEL_RETRY`, `aiModelActual`); prose naming the current model "Opus 5" → "Opus 5.5" in the same files. `effort:` values unchanged. `agents/researcher-opus.md` and `agents/synth-opus.md` copied byte-identical from `jadlis-research` 2.5.3.
+- Migration: requires Claude Code ≥ 2.1.280 — older versions may reject the unknown model ID `claude-opus-5-5` in agent/skill frontmatter. `skills/science-research/examples/sample-report.md` and the dated observations in `references/gotchas.md` keep "Opus 5" as history.
+
 ## [2.2.1] — 2026-09-21
 
 ### Для человека

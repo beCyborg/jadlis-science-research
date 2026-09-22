@@ -33,7 +33,7 @@ const WORK_DIR = A.workDir || '.search-paper/dryrun'
 const PLUGIN_ROOT = A.pluginRoot || '.'
 const VAULT_PATH = A.vaultPath || ''
 
-// Воркер: пиннинг Opus 5 + effort high через субагента researcher-opus (как в full-research-core).
+// Воркер: пиннинг Opus 5.5 + effort high через субагента researcher-opus (как в full-research-core).
 const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-science-research:researcher-opus' }
 const w = extra => Object.assign({}, WORKER_OPTS, extra)
 
@@ -45,8 +45,8 @@ const w = extra => Object.assign({}, WORKER_OPTS, extra)
 const FABLE_SYNTH = A.fableBridge !== false
 const SYNTH_AGENT = FABLE_SYNTH ? 'jadlis-science-research:synth-fable' : 'jadlis-science-research:synth-opus'
 // ai_model отчёта печатается по тому, что реально исполнилось, а не по догадке вызывающего.
-const AI_MODEL = FABLE_SYNTH ? 'claude-fable-5-1' : 'claude-opus-5'
-const AI_MODEL_RETRY = 'claude-opus-5'
+const AI_MODEL = FABLE_SYNTH ? 'claude-fable-5-1' : 'claude-opus-5-5'
+const AI_MODEL_RETRY = 'claude-opus-5-5'
 
 
 // ── Константы always-deep (saturation/cap/budget гейты вместо tiered-режима) ──
@@ -1228,11 +1228,11 @@ const synthOpts = (label, agentType) => ({ label, phase: 'Synthesize', schema: S
 let synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL, coverage),
   synthOpts(FABLE_SYNTH ? 'synth→fable' : 'synth', SYNTH_AGENT))
 
-// Одна попытка на Opus 5 — только на Fable-ветке: при fableBridge:false первый вызов уже был
+// Одна попытка на Opus 5.5 — только на Fable-ветке: при fableBridge:false первый вызов уже был
 // на Opus, и повтор перезапустил бы то, что человек мог пропустить намеренно.
 let synthFellBack = false
 if (!synth && FABLE_SYNTH) {
-  log('synth (Fable) вернул null — одна попытка на Opus 5.')
+  log('synth (Fable) вернул null — одна попытка на Opus 5.5.')
   synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL_RETRY, coverage),
     synthOpts('synth→opus-retry', 'jadlis-science-research:synth-opus'))
   synthFellBack = true
@@ -1245,7 +1245,7 @@ if (!synth) {
 }
 // draft.md, not report.md: CC 2.1.276+ blocks subagent Write to ^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$
 const reportPath = synth.reportPath || `${WORK_DIR}/draft.md`
-const aiModelActual = (FABLE_SYNTH && !synthFellBack) ? 'claude-fable-5-1' : 'claude-opus-5'
+const aiModelActual = (FABLE_SYNTH && !synthFellBack) ? 'claude-fable-5-1' : 'claude-opus-5-5'
 log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthMax}, GRADE_max=${synth?.gradeMax}, модель=${aiModelActual}.`)
 
 // ── Phase Adversarial ──

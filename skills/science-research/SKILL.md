@@ -11,7 +11,7 @@ allowed-tools:
   - mcp__plugin_jadlis-search_brave-search__brave_web_search
   - mcp__plugin_jadlis-search_firecrawl__firecrawl_scrape
 argument-hint: "<query — научный вопрос на русском или английском>"
-model: claude-opus-5
+model: claude-opus-5-5
 effort: high
 ---
 
@@ -130,12 +130,12 @@ Workflow({
 })
 ```
 
-Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5
+Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5.5
 (`jadlis-science-research:researcher-opus`); **synth — Fable 5.1 обычным субагентом**
 (`jadlis-science-research:synth-fable`, effort high). `fableBridge: false` → synth уходит на
 `jadlis-science-research:synth-opus`. `aiModel` НЕ передавай: ядро само выводит значение для frontmatter
 и возвращает в `aiModelActual` ту модель, что реально сработала (synth на Fable, вернувший null,
-один раз ретраится на Opus 5).
+один раз ретраится на Opus 5.5).
 
 Ядро само читает протоколы источников, строит per-source запросы, делает snowballing,
 retraction-check всех DOI (Crossref `update-to`), anti-hallucination (`titleMatch`), GRADE
@@ -225,7 +225,7 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    - **Что не журнал (`enrich.greyLit`, если поле есть):** сколько работ пришло из DataCite
      (отчёты ведомств, диссертации) — они в выводах с пометкой. `enrich.excludedSilently` —
      сколько DOI не резолвились нигде и потому исключены.
-   - **Модель синтеза:** `aiModelActual` — та, что сработала (Fable либо Opus 5 на ретрае).
+   - **Модель синтеза:** `aiModelActual` — та, что сработала (Fable либо Opus 5.5 на ретрае).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
    - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:
      per-source, enrich, adversarial.md). Напоминание: `verified: false` → попадёт в
