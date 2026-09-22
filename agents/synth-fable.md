@@ -1,6 +1,6 @@
 ---
 name: synth-fable
-description: "Workflow-only synthesis role on Fable 5.1 (opt-in fableBridge:true; retry after an Opus null); never invoke manually."
+description: "Workflow-only synthesis role on Fable 5.1 — opt-in via fableBridge:true, and the one retry when the Opus synthesiser returns null; never invoke manually."
 tools: Read, Write, Glob
 model: claude-fable-5-1
 effort: high

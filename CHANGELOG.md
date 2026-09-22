@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+## [2.3.1] — 2026-09-22
+
+### Для человека
+
+- Поведение не меняется: описания двух агентов синтеза выровнены с плагином `jadlis-research`, чтобы у обоих плагинов они совпадали слово в слово.
+
+### For agents
+
+- Changed: `agents/synth-opus.md` and `agents/synth-fable.md` copied byte-identical from `jadlis-research` 2.6.0 (tag `jadlis-research--v2.6.0`); only the `description:` lines differed from 2.3.0. Model and `effort:` unchanged (`synth-opus` xhigh, `synth-fable` high).
+
 ## [2.3.0] — 2026-09-22 — Синтез на Opus 5.5 xhigh / Synthesis on Opus 5.5 xhigh
 
 ### Для человека
