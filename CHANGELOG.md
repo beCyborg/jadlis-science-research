@@ -5,6 +5,32 @@
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-09-22 — Синтез на Opus 5.5 xhigh / Synthesis on Opus 5.5 xhigh
+
+### Для человека
+
+- **Итоговый отчёт теперь по умолчанию пишет Opus 5.5 на уровне рассуждения xhigh, а не Fable 5.1.**
+  По замерам Artificial Analysis он сильнее на задачах, похожих на наши: GDPval 1820 против 1617
+  у Fable 5.1, реже отвечает наугад (0,66 против 0,69); на научном коде SciCode переход с high на
+  xhigh даёт 60,4 → 65,0. Задача обходится дешевле и не расходует отдельный недельный лимит Fable.
+- **Fable остаётся доступен:** `fableBridge: true` в аргументах возвращает синтез на Fable 5.1.
+  Поиск по очень длинному контексту у Opus 5.5 ещё не измерен — если отчёт начнёт терять факты из
+  собранных материалов, это первый выключатель.
+- **Отчёт не пропадает из-за отказа одной модели.** Если синтез вернулся пустым, он один раз
+  повторяется на модели другого семейства, в обе стороны: Opus → Fable, Fable → Opus. Раньше повтор
+  был только с Fable на Opus. В свойствах отчёта `ai_model` — та модель, что реально его написала.
+- **Критик отчёта думает глубже (xhigh), механические шаги — короче (medium):** слияние дублей,
+  совместное цитирование и проверка DOI по Crossref долгих рассуждений не требуют.
+
+### For agents
+
+- Changed: `workflows/search-paper-core.js` — `FABLE_SYNTH = A.fableBridge === true` (was `!== false`); synthesis defaults to `jadlis-science-research:synth-opus`.
+- Changed: synthesis retry is symmetric — gate `if (!synth)` (was `if (!synth && FABLE_SYNTH)`), one retry on the new `SYNTH_AGENT_RETRY` (the other family; label `synth→fable-retry` or `synth→opus-retry`); `AI_MODEL_RETRY` derives from the branch; `aiModelActual = (FABLE_SYNTH !== synthFellBack) ? fable : opus`. First-call labels unchanged: `synth` (Opus), `synth→fable` (Fable).
+- Changed: per-call `effort` in `agent()` options (overrides the `researcher-opus` frontmatter `high`): adversarial critic `xhigh`; dedup, co-citation and enrich batches `medium`. Query builder, source searchers, citation chasers, fulltext readers and fix unchanged (`high` from frontmatter; fix is mechanical by its own prompt).
+- Changed: `agents/synth-opus.md` `effort: high` → `xhigh`, description marks it as the default; `agents/synth-fable.md` description marks it as opt-in / retry. `skills/science-research/SKILL.md` — model paragraph, Phase C step 2a, summary line and `synthesis-failed` text follow the new default.
+- Changed: `tests/sp_dryrun.js` finds the synthesis prompt by the `synth` label prefix instead of the literal `synth→fable` (it asserted the old Fable default), records `effort`/`agentType` per call and asserts the default synth agent and the effort map; `tests/sp_units.js` adds A10 — both branches with 0, 1 and 2 null synthesis answers (retry agent, `ai_model` in the retry prompt, `aiModelActual`, `synthesis-failed`).
+- Migration: callers that relied on the implicit Fable default pass `fableBridge: true`. Reason: Artificial Analysis GDPval-AA Opus 5.5 xhigh 1820 vs Fable 5.1 high 1617, guessing rate 0.66 vs 0.69, SciCode high 60.4 → xhigh 65.0, lower cost per task, no Fable weekly cap. Long-context retrieval (MLCR) of Opus 5.5 is not yet measured — `fableBridge: true` is the rollback.
+
 ## [2.2.2] — 2026-09-22 — Переход на Opus 5.5 / Switch to Opus 5.5
 
 ### Для человека

@@ -131,11 +131,12 @@ Workflow({
 ```
 
 Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5.5
-(`jadlis-science-research:researcher-opus`); **synth — Fable 5.1 обычным субагентом**
-(`jadlis-science-research:synth-fable`, effort high). `fableBridge: false` → synth уходит на
-`jadlis-science-research:synth-opus`. `aiModel` НЕ передавай: ядро само выводит значение для frontmatter
-и возвращает в `aiModelActual` ту модель, что реально сработала (synth на Fable, вернувший null,
-один раз ретраится на Opus 5.5).
+(`jadlis-science-research:researcher-opus`, effort high; критик — xhigh, механические dedup,
+co-citation и enrich — medium); **synth — Opus 5.5 xhigh обычным субагентом**
+(`jadlis-science-research:synth-opus`). `fableBridge: true` → synth уходит на Fable 5.1
+(`jadlis-science-research:synth-fable`, effort high). `aiModel` НЕ передавай: ядро само выводит
+значение для frontmatter и возвращает в `aiModelActual` ту модель, что реально сработала (synth,
+вернувший null, один раз повторяется на другом семействе: Opus 5.5 → Fable 5.1, Fable → Opus 5.5).
 
 Ядро само читает протоколы источников, строит per-source запросы, делает snowballing,
 retraction-check всех DOI (Crossref `update-to`), anti-hallucination (`titleMatch`), GRADE
@@ -156,8 +157,8 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    (на живом прогоне вышел `synthesis.md`). Бери `reportPath`, а не зашитое имя.
 
 2a. **Постпроверка draft — честный `ai_model`.** Сверь frontmatter `ai_model` с `aiModelActual`
-   из объекта workflow. В норме они совпадают; расхождение означает, что synth на Fable ушёл
-   в ретрай на Opus — поправь строку на `ai_model: "{aiModelActual}"` перед записью в vault.
+   из объекта workflow. В норме они совпадают; расхождение означает, что synth ушёл в повтор
+   на другом семействе — поправь строку на `ai_model: "{aiModelActual}"` перед записью в vault.
 
 2b. **Телеметрия капов — во frontmatter.** Допиши в frontmatter draft поля из `capStats`
    (резюме в чате не переживает сессию, а без этих чисел не понять, связывает ли выборку потолок):
@@ -225,7 +226,8 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    - **Что не журнал (`enrich.greyLit`, если поле есть):** сколько работ пришло из DataCite
      (отчёты ведомств, диссертации) — они в выводах с пометкой. `enrich.excludedSilently` —
      сколько DOI не резолвились нигде и потому исключены.
-   - **Модель синтеза:** `aiModelActual` — та, что сработала (Fable либо Opus 5.5 на ретрае).
+   - **Модель синтеза:** `aiModelActual` — та, что сработала (Opus 5.5 по умолчанию, Fable 5.1 при
+     `fableBridge: true`; при повторе — другое семейство).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
    - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:
      per-source, enrich, adversarial.md). Напоминание: `verified: false` → попадёт в
@@ -234,7 +236,7 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
 ## Обработка ошибок
 
 - `insufficient-sources` (<2 источников с результатами) — покажи что собралось, в vault не пиши.
-- `synthesis-failed` — synth вернул null и на Fable, и на ретрае Opus. Материал в `{WORK_DIR}` есть,
+- `synthesis-failed` — synth вернул null и на первой модели, и на повторе на другом семействе. Материал в `{WORK_DIR}` есть,
   отчёта нет: покажи рабочую папку, в vault не пиши.
 - Source-агенты имеют встроенные фоллбэки внутри протоколов (Brave `site:` / retry).
 - obsidian CLI недоступен (Obsidian закрыт) — vault-контракт деградирует: пиши файл в `REPORT_PATH`

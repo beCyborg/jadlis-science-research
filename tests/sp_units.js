@@ -153,6 +153,38 @@ const SOURCES = ['pubmed', 'europepmc', 'openalex']
     () => {}, () => {}, { remaining: () => 10_000_000 })
   ok('capHitSnowball: потолок во время snowball взводит флаг', res.capStats.capHitSnowball === true, res.capStats)
   ok('capHitSnowball: корпус не превысил потолок', res.papersTotal <= 20 + res.capStats.sideRecords, res.papersTotal)
+
+  // ── A10: синтез по умолчанию на Opus, повтор при null — на другом семействе, в обе стороны ──
+  const SP = 'jadlis-science-research:'
+  const cases = [
+    { name: 'по умолчанию', args: {}, first: [SP + 'synth-opus', 'claude-opus-5-5'], retry: [SP + 'synth-fable', 'claude-fable-5-1'], retryLabel: 'synth→fable-retry' },
+    { name: 'fableBridge:true', args: { fableBridge: true }, first: [SP + 'synth-fable', 'claude-fable-5-1'], retry: [SP + 'synth-opus', 'claude-opus-5-5'], retryLabel: 'synth→opus-retry' },
+  ]
+  const runSynth = async (extra, nulls) => {
+    const calls = []
+    const stub = async (prompt, opts) => {
+      if (!opts.label.startsWith('synth')) return agent(prompt, opts)
+      calls.push({ label: opts.label, agentType: opts.agentType, aiModel: (/ai_model: "([^"]+)"/.exec(prompt) || [])[1] })
+      return calls.length <= nulls ? null : { reportPath: 'x/draft.md', queryRu: 'q', mainConclusion: 'm', evidenceStrengthMax: 'LOW', gradeMax: 'LOW', retractedExcluded: [], relatedCandidates: [], gaps: [], keyDois: [] }
+    }
+    const r = await run(
+      JSON.stringify({ discipline: 'biomedical', workDir: '/tmp/x', paperCap: 20, ...extra }),
+      stub, fns => Promise.all(fns.map(f => f())), async (items, fn) => { const o = []; for (const it of items) o.push(await fn(it)); return o },
+      () => {}, () => {}, { remaining: () => 10_000_000 })
+    return { r, calls }
+  }
+  for (const c of cases) {
+    const clean = await runSynth(c.args, 0)
+    ok(`synth ${c.name}: первый вызов — ${c.first[0].split(':')[1]}, ai_model ${c.first[1]}`,
+      clean.calls.length === 1 && clean.calls[0].agentType === c.first[0] && clean.calls[0].aiModel === c.first[1] && clean.r.aiModelActual === c.first[1], clean.calls)
+    const retried = await runSynth(c.args, 1)
+    const rc = retried.calls[1] || {}
+    ok(`synth ${c.name}: null → один повтор на ${c.retry[0].split(':')[1]}, aiModelActual=${c.retry[1]}`,
+      retried.calls.length === 2 && rc.label === c.retryLabel && rc.agentType === c.retry[0] && rc.aiModel === c.retry[1] && retried.r.aiModelActual === c.retry[1] && retried.r.status === 'ok',
+      { calls: retried.calls, aiModelActual: retried.r.aiModelActual })
+    const failedTwice = await runSynth(c.args, 2)
+    ok(`synth ${c.name}: два null → synthesis-failed, третьего вызова нет`, failedTwice.calls.length === 2 && failedTwice.r.status === 'synthesis-failed', failedTwice.calls.length)
+  }
   console.log(failed ? `UNITS FAILED=${failed}` : 'UNITS OK')
   process.exit(failed ? 1 : 0)
 })().catch(e => { console.log('UNITS CRASHED: ' + e.stack.split('\n').slice(0, 4).join(' | ')); process.exit(1) })

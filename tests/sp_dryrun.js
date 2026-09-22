@@ -13,7 +13,7 @@ const paper = (i, ext, doi) => ({
 })
 
 async function agent(prompt, opts) {
-  prompts.push({ label: opts.label, prompt })
+  prompts.push({ label: opts.label, prompt, effort: opts.effort, agentType: opts.agentType })
   const l = opts.label
   if (l === 'query') return {
     discipline: 'biomedical', framing: 'PECO', pico: {},
@@ -69,6 +69,10 @@ run(JSON.stringify({ discipline: 'biomedical', workDir: '/tmp/x' }), agent, para
     const missing = want.filter(w => !prompts.some(p => p.label.startsWith(w)))
     // Контракт промптов: то, что легко сломать правкой текста и что не ловится схемой.
     const find = l => (prompts.find(p => p.label === l) || { prompt: '' }).prompt
+    // Синтез ищется по префиксу метки: с 2.3.0 ветка по умолчанию — Opus (`synth`), Fable — `synth→fable`.
+    const synthCall = prompts.find(p => p.label.startsWith('synth')) || { prompt: '' }
+    const synthP = synthCall.prompt
+    const effortOf = pred => [...new Set(prompts.filter(p => pred(p.label)).map(p => p.effort))].join('|')
     const checks = [
       ['query:subquestions', /subquestions\[\]/.test(find('query')) && /coverage\[\]/.test(find('query'))],
       ['query:extraQueries', /extraQueries\[\]/.test(find('query'))],
@@ -78,10 +82,17 @@ run(JSON.stringify({ discipline: 'biomedical', workDir: '/tmp/x' }), agent, para
       ['pubmed:fallback-query', /sperm/.test(find('pubmed'))],
       // s2 не в SUBQ_SOURCES — у него по-прежнему один запрос
       ['s2:single-query', !/queries-file/.test(find('s2'))],
-      ['synth:plain-language', /plain-language\.md/.test(find('synth→fable'))],
-      ['synth:footnotes', /\[\^1\]/.test(find('synth→fable'))],
-      ['synth:coverage-frontmatter', /coverage: \{/.test(find('synth→fable'))],
-      ['synth:greyLit', /СЕРАЯ ЛИТЕРАТУРА/.test(find('synth→fable'))],
+      ['synth:plain-language', /plain-language\.md/.test(synthP)],
+      ['synth:footnotes', /\[\^1\]/.test(synthP)],
+      ['synth:coverage-frontmatter', /coverage: \{/.test(synthP)],
+      ['synth:greyLit', /СЕРАЯ ЛИТЕРАТУРА/.test(synthP)],
+      // без fableBridge синтез идёт на synth-opus, и frontmatter отчёта получает Opus 5.5
+      ['synth:default-opus', synthCall.label === 'synth' && synthCall.agentType === 'jadlis-science-research:synth-opus' && /ai_model: "claude-opus-5-5"/.test(synthP)],
+      // effort на вызове: у synth — из frontmatter агента, поэтому на вызове его нет
+      ['effort:synth-from-frontmatter', synthCall.effort === undefined],
+      ['effort:critic-xhigh', effortOf(l => l === 'adversarial') === 'xhigh'],
+      ['effort:mechanical-medium', effortOf(l => l === 'dedup' || l === 'cocite' || l.startsWith('enrich')) === 'medium'],
+      ['effort:fanout-and-fix-inherit', effortOf(l => l === 'query' || l === 'fix' || l.startsWith('chase') || l.startsWith('fulltext') || l === 'pubmed') === ''],
       ['enrich:datacite', /api\.datacite\.org/.test(prompts.filter(p => p.label.startsWith('enrich')).map(p => p.prompt).join(''))],
       ['adversarial:missingPapers', /missingPapers\[\]/.test(find('adversarial'))],
       // маркер [AR-fix] упоминается только как запрет — инструкции «поставь маркер» быть не должно
