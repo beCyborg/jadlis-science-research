@@ -34,19 +34,24 @@ const PLUGIN_ROOT = A.pluginRoot || '.'
 const VAULT_PATH = A.vaultPath || ''
 
 // Воркер: пиннинг Opus 5.5 + effort high через субагента researcher-opus (как в full-research-core).
+// Effort на вызове перебивает frontmatter агента: критик — xhigh (один агент в конце цепочки),
+// механические dedup / co-citation / enrich — medium. Источники, чейсеры, fulltext и fix — high.
 const WORKER_OPTS = A.workerOpts || { agentType: 'jadlis-science-research:researcher-opus' }
 const w = extra => Object.assign({}, WORKER_OPTS, extra)
 
-// Синтез (synth) — единственная роль с реальным Fable-преимуществом (сборка отчёта
-// из большого контекста). Идёт обычным субагентом: headless-мост существовал только ради
-// обхода собственной CLAUDE_CODE_SUBAGENT_MODEL_FORCE, снятой 07.09.2026. Агенты synth-*
-// пиннят модель, effort high и allow-лист инструментов (у agent() нет опции allowedTools).
+// Синтез (synth) — сборка отчёта из большого контекста, обычным субагентом: headless-мост
+// существовал только ради обхода собственной CLAUDE_CODE_SUBAGENT_MODEL_FORCE, снятой 07.09.2026.
+// Агенты synth-* пиннят модель, effort и allow-лист инструментов (у agent() нет опции allowedTools).
+// С 2.3.0 по умолчанию synth-opus (Opus 5.5 xhigh): GDPval-AA 1820 против 1617 у Fable 5.1 high,
+// меньше ответов наугад, дешевле за задачу и без недельного лимита Fable. fableBridge:true
+// возвращает synth-fable. При null — один повтор на другом семействе, в обе стороны.
 // Имя аргумента остаётся `fableBridge` — один словарь на все восемь воркфлоу.
-const FABLE_SYNTH = A.fableBridge !== false
+const FABLE_SYNTH = A.fableBridge === true
 const SYNTH_AGENT = FABLE_SYNTH ? 'jadlis-science-research:synth-fable' : 'jadlis-science-research:synth-opus'
+const SYNTH_AGENT_RETRY = FABLE_SYNTH ? 'jadlis-science-research:synth-opus' : 'jadlis-science-research:synth-fable'
 // ai_model отчёта печатается по тому, что реально исполнилось, а не по догадке вызывающего.
 const AI_MODEL = FABLE_SYNTH ? 'claude-fable-5-1' : 'claude-opus-5-5'
-const AI_MODEL_RETRY = 'claude-opus-5-5'
+const AI_MODEL_RETRY = FABLE_SYNTH ? 'claude-opus-5-5' : 'claude-fable-5-1'
 
 
 // ── Константы always-deep (saturation/cap/budget гейты вместо tiered-режима) ──
@@ -1042,7 +1047,7 @@ const CHASE_TERMS = (() => {
 
 // ── Phase Snowball (dedup → ≤2 итерации hub-chasing с saturation-гейтами) ──
 phase('Snowball')
-const dedup = await agent(dedupPrompt(sourceFiles), w({ label: 'dedup', phase: 'Snowball', schema: SNOWBALL_DEDUP }))
+const dedup = await agent(dedupPrompt(sourceFiles), w({ label: 'dedup', phase: 'Snowball', schema: SNOWBALL_DEDUP, effort: 'medium' }))
 const seen = new Set((dedup?.seenKeys || []).map(k => k.toLowerCase()))
 // подстрахуем seenKeys ключами из allPapers (на случай, если dedup-агент вернул не всё)
 for (const p of allPapers) { const k = paperKey(p); if (k) seen.add(k.toLowerCase()) }
@@ -1111,7 +1116,7 @@ const reviewHubs = allPapers
 if (COCITE && reviewHubs.length >= 2 && allPapers.length < PAPER_CAP) {
   const room = Math.min(COCITE_MAX, PAPER_CAP - allPapers.length)
   const co = await agent(cocitePrompt(reviewHubs, [...seen].filter(k => /^10\./.test(k)), room),
-    w({ label: 'cocite', phase: 'Snowball', schema: SNOWBALL_RESULT }))
+    w({ label: 'cocite', phase: 'Snowball', schema: SNOWBALL_RESULT, effort: 'medium' }))
   for (const p of (co?.addedPapers || [])) {
     const k = paperKey(p).toLowerCase()
     if (!k || seen.has(k) || allPapers.length >= PAPER_CAP) continue
@@ -1177,7 +1182,7 @@ let enrichItems = []
 if (doiBatches.length) {
   const enrichBatches = (await pipeline(
     doiBatches.map((b, i) => ({ dois: b, idx: i })),
-    b => agent(enrichPrompt(b.dois, b.idx, topTierDois), w({ label: `enrich:${b.idx}`, phase: 'Enrich', schema: ENRICH_BATCH_SCHEMA })),
+    b => agent(enrichPrompt(b.dois, b.idx, topTierDois), w({ label: `enrich:${b.idx}`, phase: 'Enrich', schema: ENRICH_BATCH_SCHEMA, effort: 'medium' })),
   )).filter(Boolean)
   enrichItems = enrichBatches.flatMap(b => b.items || [])
 }
@@ -1228,13 +1233,15 @@ const synthOpts = (label, agentType) => ({ label, phase: 'Synthesize', schema: S
 let synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL, coverage),
   synthOpts(FABLE_SYNTH ? 'synth→fable' : 'synth', SYNTH_AGENT))
 
-// Одна попытка на Opus 5.5 — только на Fable-ветке: при fableBridge:false первый вызов уже был
-// на Opus, и повтор перезапустил бы то, что человек мог пропустить намеренно.
+// Одна попытка на другом семействе, в обе стороны: Opus 5.5 → Fable 5.1, Fable → Opus 5.5.
+// Защитный классификатор Opus 5.5 строже и на серой теме может вернуть null — без повтора такой
+// прогон остался бы без отчёта. Повтор на той же модели не делается: сбой той же природы.
 let synthFellBack = false
-if (!synth && FABLE_SYNTH) {
-  log('synth (Fable) вернул null — одна попытка на Opus 5.5.')
+if (!synth) {
+  const [from, to] = FABLE_SYNTH ? ['Fable 5.1', 'Opus 5.5'] : ['Opus 5.5', 'Fable 5.1']
+  log(`synth (${from}) вернул null — одна попытка на ${to}.`)
   synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL_RETRY, coverage),
-    synthOpts('synth→opus-retry', 'jadlis-science-research:synth-opus'))
+    synthOpts(FABLE_SYNTH ? 'synth→opus-retry' : 'synth→fable-retry', SYNTH_AGENT_RETRY))
   synthFellBack = true
 }
 // Ранний выход обязателен: без него прогон молча уходит в Adversarial и возвращает
@@ -1245,12 +1252,13 @@ if (!synth) {
 }
 // draft.md, not report.md: CC 2.1.276+ blocks subagent Write to ^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$
 const reportPath = synth.reportPath || `${WORK_DIR}/draft.md`
-const aiModelActual = (FABLE_SYNTH && !synthFellBack) ? 'claude-fable-5-1' : 'claude-opus-5-5'
+// Fable исполнил синтез ровно тогда, когда Fable-ветка XOR был повтор.
+const aiModelActual = (FABLE_SYNTH !== synthFellBack) ? 'claude-fable-5-1' : 'claude-opus-5-5'
 log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthMax}, GRADE_max=${synth?.gradeMax}, модель=${aiModelActual}.`)
 
 // ── Phase Adversarial ──
 phase('Adversarial')
-const adversarial = await agent(adversarialPrompt(reportPath, synth?.keyDois || [], coverage), w({ label: 'adversarial', phase: 'Adversarial', schema: ADVERSARIAL }))
+const adversarial = await agent(adversarialPrompt(reportPath, synth?.keyDois || [], coverage), w({ label: 'adversarial', phase: 'Adversarial', schema: ADVERSARIAL, effort: 'xhigh' }))
 const edits = (adversarial?.edits || [])
 // Работы, названные критиком отсутствующими, идут в fix отдельным списком: раньше они жили только
 // в тексте разбора, а fix-агент читает структурированный ответ — так терялась Kanobe 2025.

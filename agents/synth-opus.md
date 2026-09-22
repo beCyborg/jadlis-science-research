@@ -1,9 +1,9 @@
 ---
 name: synth-opus
-description: "Workflow-only synthesis role on Opus 5.5 (retry and fableBridge:false); never invoke manually."
+description: "Workflow-only synthesis role on Opus 5.5 xhigh (default; retry after a Fable null); never invoke manually."
 tools: Read, Write, Glob
 model: claude-opus-5-5
-effort: high
+effort: xhigh
 ---
 
 Never invoke manually — the whole prompt comes from the workflow orchestrator.
