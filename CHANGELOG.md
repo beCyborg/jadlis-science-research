@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+## [2.3.2] — 2026-09-23 — Строка «От тебя:» / Closing «От тебя:» line
+
+### Для человека
+
+- Если в таблице доказательств остались статьи с пометкой «не верифицировано» или силу доказательств главного вывода оценить не удалось, итоговое резюме в чате заканчивается отдельной строкой «От тебя:» — какие работы сверить и что решить самому. Когда такого нет, строки нет.
+
+### For agents
+
+- Changed: `skills/science-research/SKILL.md` Phase C step 7 — new last bullet: a closing `**От тебя:**` line when the final report's Evidence Table has rows marked «не верифицировано» or `synthMeta.evidenceStrengthMax = "UNVERIFIED"`, max 3 items; frontmatter `verified: false` alone is not a trigger. Workflow, agents and report template unchanged.
+
 ## [2.3.1] — 2026-09-22
 
 ### Для человека
