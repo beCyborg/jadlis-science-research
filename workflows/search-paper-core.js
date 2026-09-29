@@ -44,14 +44,17 @@ const w = extra => Object.assign({}, WORKER_OPTS, extra)
 // Агенты synth-* пиннят модель, effort и allow-лист инструментов (у agent() нет опции allowedTools).
 // С 2.3.0 по умолчанию synth-opus (Opus 5.5 xhigh): GDPval-AA 1820 против 1617 у Fable 5.1 high,
 // меньше ответов наугад, дешевле за задачу и без недельного лимита Fable. fableBridge:true
-// возвращает synth-fable. При null — один повтор на другом семействе, в обе стороны.
+// выбирает synth-fable. С 2.3.3 (29.09.2026) synth-fable тоже Opus 5.5, effort high: Fable 5.1
+// больше не используется, имя агента и флаг `fableBridge` исторические. При null — один повтор
+// на другой роли synth-* (xhigh ↔ high), в обе стороны.
 // Имя аргумента остаётся `fableBridge` — один словарь на все восемь воркфлоу.
 const FABLE_SYNTH = A.fableBridge === true
 const SYNTH_AGENT = FABLE_SYNTH ? 'jadlis-science-research:synth-fable' : 'jadlis-science-research:synth-opus'
 const SYNTH_AGENT_RETRY = FABLE_SYNTH ? 'jadlis-science-research:synth-opus' : 'jadlis-science-research:synth-fable'
 // ai_model отчёта печатается по тому, что реально исполнилось, а не по догадке вызывающего.
-const AI_MODEL = FABLE_SYNTH ? 'claude-fable-5-1' : 'claude-opus-5-5'
-const AI_MODEL_RETRY = FABLE_SYNTH ? 'claude-opus-5-5' : 'claude-fable-5-1'
+// Обе роли synth-* с 2.3.3 на Opus 5.5 — значения совпадают, развилка оставлена на случай смены модели.
+const AI_MODEL = 'claude-opus-5-5'
+const AI_MODEL_RETRY = 'claude-opus-5-5'
 
 
 // ── Константы always-deep (saturation/cap/budget гейты вместо tiered-режима) ──
@@ -1233,12 +1236,12 @@ const synthOpts = (label, agentType) => ({ label, phase: 'Synthesize', schema: S
 let synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL, coverage),
   synthOpts(FABLE_SYNTH ? 'synth→fable' : 'synth', SYNTH_AGENT))
 
-// Одна попытка на другом семействе, в обе стороны: Opus 5.5 → Fable 5.1, Fable → Opus 5.5.
-// Защитный классификатор Opus 5.5 строже и на серой теме может вернуть null — без повтора такой
-// прогон остался бы без отчёта. Повтор на той же модели не делается: сбой той же природы.
+// Одна попытка на другой роли synth-*, в обе стороны: synth-opus (xhigh) ↔ synth-fable (high).
+// С 2.3.3 обе на Opus 5.5 — повтор той же модели с другим effort: от сессионного лимита или
+// случайного сбоя спасает, от отказа классификатора на серой теме может и не спасти.
 let synthFellBack = false
 if (!synth) {
-  const [from, to] = FABLE_SYNTH ? ['Fable 5.1', 'Opus 5.5'] : ['Opus 5.5', 'Fable 5.1']
+  const [from, to] = FABLE_SYNTH ? ['Opus 5.5 high (synth-fable)', 'Opus 5.5 xhigh (synth-opus)'] : ['Opus 5.5 xhigh (synth-opus)', 'Opus 5.5 high (synth-fable)']
   log(`synth (${from}) вернул null — одна попытка на ${to}.`)
   synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL_RETRY, coverage),
     synthOpts(FABLE_SYNTH ? 'synth→opus-retry' : 'synth→fable-retry', SYNTH_AGENT_RETRY))
@@ -1252,8 +1255,8 @@ if (!synth) {
 }
 // draft.md, not report.md: CC 2.1.276+ blocks subagent Write to ^(REPORT|SUMMARY|FINDINGS|ANALYSIS).*\.md$
 const reportPath = synth.reportPath || `${WORK_DIR}/draft.md`
-// Fable исполнил синтез ровно тогда, когда Fable-ветка XOR был повтор.
-const aiModelActual = (FABLE_SYNTH !== synthFellBack) ? 'claude-fable-5-1' : 'claude-opus-5-5'
+// Модель, что реально написала отчёт: первая роль или, если сработал повтор, другая.
+const aiModelActual = synthFellBack ? AI_MODEL_RETRY : AI_MODEL
 log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthMax}, GRADE_max=${synth?.gradeMax}, модель=${aiModelActual}.`)
 
 // ── Phase Adversarial ──

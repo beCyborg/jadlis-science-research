@@ -69,7 +69,7 @@ run(JSON.stringify({ discipline: 'biomedical', workDir: '/tmp/x' }), agent, para
     const missing = want.filter(w => !prompts.some(p => p.label.startsWith(w)))
     // Контракт промптов: то, что легко сломать правкой текста и что не ловится схемой.
     const find = l => (prompts.find(p => p.label === l) || { prompt: '' }).prompt
-    // Синтез ищется по префиксу метки: с 2.3.0 ветка по умолчанию — Opus (`synth`), Fable — `synth→fable`.
+    // Синтез ищется по префиксу метки: с 2.3.0 ветка по умолчанию — synth-opus (`synth`), synth-fable — `synth→fable` (с 2.3.3 тоже Opus 5.5).
     const synthCall = prompts.find(p => p.label.startsWith('synth')) || { prompt: '' }
     const synthP = synthCall.prompt
     const effortOf = pred => [...new Set(prompts.filter(p => pred(p.label)).map(p => p.effort))].join('|')

@@ -154,11 +154,11 @@ const SOURCES = ['pubmed', 'europepmc', 'openalex']
   ok('capHitSnowball: потолок во время snowball взводит флаг', res.capStats.capHitSnowball === true, res.capStats)
   ok('capHitSnowball: корпус не превысил потолок', res.papersTotal <= 20 + res.capStats.sideRecords, res.papersTotal)
 
-  // ── A10: синтез по умолчанию на Opus, повтор при null — на другом семействе, в обе стороны ──
+  // ── A10: синтез по умолчанию на synth-opus, повтор при null — на другой роли synth-*, в обе стороны (с 2.3.3 обе на Opus 5.5) ──
   const SP = 'jadlis-science-research:'
   const cases = [
-    { name: 'по умолчанию', args: {}, first: [SP + 'synth-opus', 'claude-opus-5-5'], retry: [SP + 'synth-fable', 'claude-fable-5-1'], retryLabel: 'synth→fable-retry' },
-    { name: 'fableBridge:true', args: { fableBridge: true }, first: [SP + 'synth-fable', 'claude-fable-5-1'], retry: [SP + 'synth-opus', 'claude-opus-5-5'], retryLabel: 'synth→opus-retry' },
+    { name: 'по умолчанию', args: {}, first: [SP + 'synth-opus', 'claude-opus-5-5'], retry: [SP + 'synth-fable', 'claude-opus-5-5'], retryLabel: 'synth→fable-retry' },
+    { name: 'fableBridge:true', args: { fableBridge: true }, first: [SP + 'synth-fable', 'claude-opus-5-5'], retry: [SP + 'synth-opus', 'claude-opus-5-5'], retryLabel: 'synth→opus-retry' },
   ]
   const runSynth = async (extra, nulls) => {
     const calls = []

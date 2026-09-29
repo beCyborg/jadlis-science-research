@@ -133,10 +133,11 @@ Workflow({
 Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5.5
 (`jadlis-science-research:researcher-opus`, effort high; критик — xhigh, механические dedup,
 co-citation и enrich — medium); **synth — Opus 5.5 xhigh обычным субагентом**
-(`jadlis-science-research:synth-opus`). `fableBridge: true` → synth уходит на Fable 5.1
-(`jadlis-science-research:synth-fable`, effort high). `aiModel` НЕ передавай: ядро само выводит
+(`jadlis-science-research:synth-opus`). `fableBridge: true` → synth уходит на
+`jadlis-science-research:synth-fable` — с 2.3.3 тоже Opus 5.5, effort high (имя и флаг исторические,
+Fable 5.1 больше не используется). `aiModel` НЕ передавай: ядро само выводит
 значение для frontmatter и возвращает в `aiModelActual` ту модель, что реально сработала (synth,
-вернувший null, один раз повторяется на другом семействе: Opus 5.5 → Fable 5.1, Fable → Opus 5.5).
+вернувший null, один раз повторяется на другой роли synth-*: xhigh ↔ high, обе на Opus 5.5).
 
 Ядро само читает протоколы источников, строит per-source запросы, делает snowballing,
 retraction-check всех DOI (Crossref `update-to`), anti-hallucination (`titleMatch`), GRADE
@@ -226,8 +227,8 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    - **Что не журнал (`enrich.greyLit`, если поле есть):** сколько работ пришло из DataCite
      (отчёты ведомств, диссертации) — они в выводах с пометкой. `enrich.excludedSilently` —
      сколько DOI не резолвились нигде и потому исключены.
-   - **Модель синтеза:** `aiModelActual` — та, что сработала (Opus 5.5 по умолчанию, Fable 5.1 при
-     `fableBridge: true`; при повторе — другое семейство).
+   - **Модель синтеза:** `aiModelActual` — та, что сработала (с 2.3.3 всегда Opus 5.5: xhigh по
+     умолчанию, high при `fableBridge: true` или на повторе).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
    - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:
      per-source, enrich, adversarial.md). Напоминание: `verified: false` → попадёт в

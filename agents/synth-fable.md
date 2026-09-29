@@ -1,8 +1,8 @@
 ---
 name: synth-fable
-description: "Workflow-only synthesis role on Fable 5.1 — opt-in via fableBridge:true, and the one retry when the Opus synthesiser returns null; never invoke manually."
+description: "Workflow-only alternate synthesis role on Opus 5.5 at effort high (the name is historical: Fable 5.1 until 2026-09-29) — opt-in via fableBridge:true, and the one retry when synth-opus returns null; never invoke manually."
 tools: Read, Write, Glob
-model: claude-fable-5-1
+model: claude-opus-5-5
 effort: high
 ---
 

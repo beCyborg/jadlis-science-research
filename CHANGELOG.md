@@ -5,6 +5,22 @@
 
 ## [Unreleased]
 
+## [2.3.3] — 2026-09-29 — Без Fable / Fable dropped
+
+### Для человека
+
+- Научный ресёрч больше не обращается к Fable 5.1. Синтез по флагу `fableBridge: true` и повтор после пустого ответа теперь тоже идут на Opus 5.5, только на уровне рассуждения high вместо xhigh.
+- Зачем: по ресёрчу «Opus 5.5 на моих задачах» Opus 5.5 на high по индексу Artificial Analysis держится вровень с Fable 5.1 на max, а задача обходится примерно вчетверо дешевле.
+- В свойствах отчёта `ai_model` теперь всегда `claude-opus-5-5`.
+
+### For agents
+
+- Changed: `agents/synth-fable.md` — `model: claude-fable-5-1` → `claude-opus-5-5` (effort `high` unchanged), description marks the name as historical; `agents/synth-opus.md` description follows. Both files stay byte-identical with `jadlis-research` 2.7.1 (tag `jadlis-research--v2.7.1`).
+- Changed: `workflows/search-paper-core.js` — `AI_MODEL` and `AI_MODEL_RETRY` = `'claude-opus-5-5'` in both branches; `aiModelActual = synthFellBack ? AI_MODEL_RETRY : AI_MODEL` (was the Fable XOR); retry log names the synth-* role and effort; comments no longer promise a cross-family retry. `fableBridge`, `FABLE_SYNTH`, agent names and the `synth→fable` / `synth→fable-retry` labels are kept.
+- Changed: `skills/science-research/SKILL.md` — models paragraph and Phase C «Модель синтеза».
+- Tests: `tests/sp_units.js` A10 expects `claude-opus-5-5` for synth-fable; `tests/sp_dryrun.js` comment. `node tests/sp_units.js` → UNITS OK, `node tests/sp_dryrun.js` → PROMPT_CONTRACT=ok, `pytest tests/` → 42 passed.
+- Migration: none; `fableBridge: true` still works and now selects synth-fable on Opus 5.5 high.
+
 ## [2.3.2] — 2026-09-23 — Строка «От тебя:» / Closing «От тебя:» line
 
 ### Для человека
