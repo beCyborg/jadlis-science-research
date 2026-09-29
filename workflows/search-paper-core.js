@@ -843,7 +843,6 @@ ${covRows.length ? `\nПОКРЫТИЕ ПОДТЕМ (сколько статей
 type: research
 created: ${DATE}
 ai_drafted: true
-verified: false
 ai_model: "${aiModel}"
 tags: []
 query: "${QUERY_RU.replace(/"/g, '«')}"
@@ -964,7 +963,7 @@ ${JSON.stringify(missing, null, 2)}
    | M1 | Безопасность | добавлена работа Kimblad 2022 (сноска 12) |
    \`\`\`
    Пропущенные работы нумеруй M1, M2… в порядке missingPapers[]. Это единственная диагностика «тело поправлено» — раньше ею были метки [AR-fix] в отчёте.
-НЕ применяй confidence<0.7. НЕ удаляй секции целиком. НЕ трогай verified:false. В видимую зону не тащи коды статей, английские слова GRADE, интервалы и p-значения.
+НЕ применяй confidence<0.7. НЕ удаляй секции целиком. В видимую зону не тащи коды статей, английские слова GRADE, интервалы и p-значения.
 
 Верни по схеме FIX: applied[] (id правок + M-номера добавленных работ), skipped[] (id+причина), tldrUpdated, evidenceTableUpdated, frontmatterUpdated, reliabilityScore=${reliabilityScore}.
 НЕ спавни субагентов.`

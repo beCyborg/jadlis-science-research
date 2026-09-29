@@ -201,7 +201,7 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
 5. **Wikilinks + запись.** В разделе `## Связанные заметки` (он пуст-заглушка) проставь wikilinks
    `[[Название]]` **ТОЛЬКО** на заметки, реально найденные на шаге 3 (`relatedCandidates` — лишь
    подсказки для поиска; НЕ создавай unresolved links). CLI недоступен → убери раздел. Запиши
-   финальный файл в `REPORT_PATH` (Write — draft с заполненным разделом; `verified: false` сохрани).
+   финальный файл в `REPORT_PATH` (Write — draft с заполненным разделом).
 
 6. **Post-write (daily note).** Если Obsidian открыт:
    ```bash
@@ -231,14 +231,13 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
      умолчанию, high при `fableBridge: true` или на повторе).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
    - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:
-     per-source, enrich, adversarial.md). Напоминание: `verified: false` → попадёт в
-     `Обзоры/wiki-stream.base` «Pending AI drafts»; после ревью пользователь ставит `verified: true`.
+     per-source, enrich, adversarial.md).
    - **Последняя строка «От тебя:» — только если в отчёт попало непроверенное.** Условие: в
      Evidence Table финального отчёта есть строки с пометкой «не верифицировано» (статьи из
      `enrich.unverified`, которые synth оставил в таблице; проверка —
      `command grep -n 'не верифицировано' "{REPORT_PATH}"`, считаются только строки таблицы `|…|`)
      или `synthMeta.evidenceStrengthMax = "UNVERIFIED"` (силу доказательств главного вывода оценить
-     не удалось). Одного `verified: false` во frontmatter мало — он стоит в каждом отчёте.
+     не удалось). Других триггеров нет: без этих двух условий строки «От тебя:» нет.
      Отозванные, неверифицированные статьи вне таблицы и claims, оспоренные критиком, сюда не идут:
      они уже отсеяны и в выводы не вошли. Тогда резюме заканчивается отдельной строкой, начинающейся
      с `**От тебя:**`: что проверить или решить — какие работы сверить по DOI (первый автор, год,

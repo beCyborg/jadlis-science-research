@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+## [2.3.4] — 2026-09-30 — Без свойства verified / verified property dropped
+
+### Для человека
+
+- В свойствах отчёта больше нет `verified: false`. Флаг никто не переключал и ничто его не читало, а черновик ИИ и так отмечен свойством `ai_drafted: true`.
+- Строка «От тебя:» в итоге работает как раньше: она появляется только при непроверенных статьях в таблице доказательств или при силе доказательств `UNVERIFIED`.
+
+### For agents
+
+- Removed: the `verified` frontmatter property from the synth report template in `workflows/search-paper-core.js` and the fixer's «НЕ трогай verified:false» rule; `skills/science-research/examples/sample-report.md`.
+- Changed: `skills/science-research/SKILL.md` Phase C — step 5 no longer asks to keep `verified: false`; step 7 drops the `wiki-stream.base` «Pending AI drafts» reminder and rewrites the «От тебя:» trigger sentence without the field (trigger unchanged).
+- Tests: `node tests/sp_units.js` → UNITS OK, `node tests/sp_dryrun.js` → PROMPT_CONTRACT=ok, `pytest tests/` → 42 passed.
+- Migration: none; existing vault notes keep their `verified` property, nothing reads it.
+
 ## [2.3.3] — 2026-09-29 — Без Fable / Fable dropped
 
 ### Для человека

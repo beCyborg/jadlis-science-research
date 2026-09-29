@@ -2,7 +2,6 @@
 type: research
 created: 2026-06-10
 ai_drafted: true
-verified: false
 ai_model: "claude-opus-5"
 tags: []
 query: "Омега-3 при инсулинорезистентности — снижает ли триглицериды и улучшает ли HOMA-IR"
