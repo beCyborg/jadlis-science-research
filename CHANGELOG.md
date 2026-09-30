@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [2.3.5] — 2026-09-30 — Ловушка смоука с `--tools ""` / smoke gotcha for `--tools ""`
+
+### Для человека
+
+- В список ловушек скилла добавлена одна: быстрая проверка скилла через `claude -p` без инструментов возвращает пустой ответ. Это не поломка плагина — нужен флаг `--tools Bash`.
+
+### For agents
+
+- Added: `skills/science-research/references/gotchas.md` — «Резолв-смоук скилла требует `--tools Bash`» (bang substitution `` !`date` `` + `--tools ""` → `result: ""`, 0 tokens). Moved here from the owner's always-loaded `bash-gotchas.md` rule to cut startup context.
+- Migration: none.
+
 ## [2.3.4] — 2026-09-30 — Без свойства verified / verified property dropped
 
 ### Для человека
