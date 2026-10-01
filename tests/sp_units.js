@@ -148,7 +148,7 @@ const SOURCES = ['pubmed', 'europepmc', 'openalex']
   const AsyncFn = Object.getPrototypeOf(async function () {}).constructor
   const run = new AsyncFn('args', 'agent', 'parallel', 'pipeline', 'phase', 'log', 'budget', src)
   const res = await run(
-    JSON.stringify({ discipline: 'biomedical', workDir: '/tmp/x', paperCap: 20, corpusOnly: true }),
+    JSON.stringify({ dryRun: true, discipline: 'biomedical', workDir: '/tmp/x', paperCap: 20, corpusOnly: true }),
     agent, fns => Promise.all(fns.map(f => f())), async (items, fn) => { const o = []; for (const it of items) o.push(await fn(it)); return o },
     () => {}, () => {}, { remaining: () => 10_000_000 })
   ok('capHitSnowball: потолок во время snowball взводит флаг', res.capStats.capHitSnowball === true, res.capStats)
@@ -168,7 +168,7 @@ const SOURCES = ['pubmed', 'europepmc', 'openalex']
       return calls.length <= nulls ? null : { reportPath: 'x/draft.md', queryRu: 'q', mainConclusion: 'm', evidenceStrengthMax: 'LOW', gradeMax: 'LOW', retractedExcluded: [], relatedCandidates: [], gaps: [], keyDois: [] }
     }
     const r = await run(
-      JSON.stringify({ discipline: 'biomedical', workDir: '/tmp/x', paperCap: 20, ...extra }),
+      JSON.stringify({ dryRun: true, discipline: 'biomedical', workDir: '/tmp/x', paperCap: 20, ...extra }),
       stub, fns => Promise.all(fns.map(f => f())), async (items, fn) => { const o = []; for (const it of items) o.push(await fn(it)); return o },
       () => {}, () => {}, { remaining: () => 10_000_000 })
     return { r, calls }

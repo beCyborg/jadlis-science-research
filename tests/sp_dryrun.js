@@ -58,7 +58,7 @@ const budget = { remaining: () => 10_000_000 }
 const AsyncFn = Object.getPrototypeOf(async function () {}).constructor
 const run = new AsyncFn('args', 'agent', 'parallel', 'pipeline', 'phase', 'log', 'budget', src)
 
-run(JSON.stringify({ discipline: 'biomedical', workDir: '/tmp/x' }), agent, parallel, pipeline, phase, log, budget)
+run(JSON.stringify({ dryRun: true, discipline: 'biomedical', workDir: '/tmp/x' }), agent, parallel, pipeline, phase, log, budget)
   .then(res => {
     console.log('RUN OK status=' + res.status + ' papers=' + res.papersTotal + ' prompts=' + prompts.length)
     const want = ['query', 'core', 'dedup', 'cocite', 'chase', 'enrich', 'fulltext', 'synth', 'adversarial', 'fix']

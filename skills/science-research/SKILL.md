@@ -130,6 +130,13 @@ Workflow({
 })
 ```
 
+Гард аргументов (2.3.6): ядро не стартует — ноль агентов — если `args` пришёл строкой, которая не
+парсится как JSON (кавычки-ёлочки „“ или неэкранированная `"` внутри значения), если пуст или
+отсутствует любой из ключей `refinedQueryRu`, `refinedQueryEn`, `date`, `workDir`, `pluginRoot`,
+или если `workDir` не абсолютный. Ошибка называет, что сломано; поправь args и вызови снова.
+`resumeFromRunId` args не наследует — передавай их целиком. Встроенные dry-run-дефолты работают
+только при `dryRun: true`.
+
 Модели внутри ядра: query-builder, источники, snowball, enrich, критик и fix — Opus 5.5
 (`jadlis-science-research:researcher-opus`, effort high; критик — xhigh, механические dedup,
 co-citation и enrich — medium); **synth — Opus 5.5 xhigh обычным субагентом**

@@ -12,8 +12,52 @@ export const meta = {
   ],
 }
 
-// ── Параметры (skill передаёт после Phase A intake; дефолты — для dry-run) ──
-const A = (() => { try { return typeof args === 'string' ? JSON.parse(args) : (args || {}) } catch (e) { return {} } })()
+// ── Параметры (skill передаёт после Phase A intake; дефолты — только при dryRun:true) ──
+// args может прийти JSON-строкой — нормализуем. Непарсящаяся строка — ошибка, а не `{}`.
+const SCRIPT_NAME = 'search-paper-core'
+const argsPreview = v => {
+  let s
+  try { s = typeof v === 'string' ? v : JSON.stringify(v) } catch (e) { s = String(v) }
+  return `${v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v}: ${String(s).slice(0, 300)}`
+}
+const A = (() => {
+  if (typeof args !== 'string') return args || {}
+  let parsed
+  try { parsed = JSON.parse(args) } catch (e) {
+    throw new Error(`${SCRIPT_NAME}: args is a string that is not valid JSON (${e.message}). ` +
+      `Raw args (first 300 chars): ${args.slice(0, 300)} — hint: curly quotes „“ or an unescaped \\" inside a value break JSON; ` +
+      'pass the same args in full (resume does not inherit args).')
+  }
+  return parsed
+})()
+
+// ── Гард аргументов (2.3.6) — падаем сразу, НОЛЬ агентов ──
+// До 2.3.6 сломанный вызов (непарсящиеся args, resumeFromRunId без args, пропущенный ключ)
+// проваливался в dry-run-дефолты ниже и гнал весь конвейер на тестовой теме «омега-3»
+// (2–2,6M токенов за инцидент); относительный workDir резолвился от cwd сессии и разбрасывал
+// файлы. Теперь дефолты доступны ТОЛЬКО при dryRun:true. Иначе каждый ключ, который скилл
+// передаёт всегда (skills/science-research/SKILL.md, Phase B), обязан быть непустым, а workDir —
+// абсолютным. Блок держать до первого вызова agent().
+const DRY_RUN = !!A && typeof A === 'object' && !Array.isArray(A) && A.dryRun === true
+const REQUIRED_ARGS = ['refinedQueryRu', 'refinedQueryEn', 'date', 'workDir', 'pluginRoot']
+const ARGS_HINT = 'pass the same args in full — resumeFromRunId does not inherit args; ' +
+  'for a test run on the built-in dry-run defaults pass dryRun:true'
+if (!A || typeof A !== 'object' || Array.isArray(A)) {
+  throw new Error(`${SCRIPT_NAME}: args must be an object; got ${argsPreview(args)} — hint: ${ARGS_HINT}.`)
+}
+if (!DRY_RUN) {
+  const isEmpty = v => v === undefined || v === null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length)
+  const missing = REQUIRED_ARGS.filter(k => isEmpty(A[k]))
+  if (missing.length) {
+    throw new Error(`${SCRIPT_NAME}: missing or empty required args: ${missing.join(', ')}. ` +
+      `Arrived ${argsPreview(args)} — hint: ${ARGS_HINT}.`)
+  }
+  if (typeof A.workDir !== 'string' || !A.workDir.startsWith('/')) {
+    throw new Error(`${SCRIPT_NAME}: workDir must be an absolute path (starts with '/'); got ${argsPreview(A.workDir)}. ` +
+      'A relative workDir resolves against the session cwd and scatters files — pass {VAULT_PATH}/.search-paper/<id>_<slug>.')
+  }
+}
+
 const QUERY_RU = A.refinedQueryRu || 'Омега-3 и триглицериды (dry-run)'
 const QUERY_EN = A.refinedQueryEn || 'omega-3 fatty acids supplementation effect on triglycerides in adults'
 const FRAMING = A.framing === 'PICO' ? 'PICO' : 'PECO'              // питание/экспозиция → PECO (дефолт)

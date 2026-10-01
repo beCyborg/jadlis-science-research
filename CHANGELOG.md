@@ -5,6 +5,23 @@
 
 ## [Unreleased]
 
+## [2.3.6] — 2026-10-02 — Ядро не стартует на сломанных аргументах / args guard
+
+### Для человека
+
+- Если научный ресёрч запущен с испорченными аргументами — кавычки-ёлочки „“ или лишняя `"` внутри формулировки, повторный запуск без аргументов, пропущенное поле, — он больше не уходит молча на тестовую тему. Раньше такой запуск отрабатывал весь конвейер по «омега-3 и триглицериды» и стоил 2–2,6 млн токенов.
+- Теперь ядро останавливается сразу, ни одного агента не запускает и пишет, что именно сломано: какие поля пустые или где ошибка в JSON, с началом того, что пришло.
+- Папка прогона должна быть полным путём: относительный путь раскидывал файлы по текущей папке сессии.
+
+### For agents
+
+- Added: args guard block in `workflows/search-paper-core.js` right after the args normalisation, before any `agent()` call. Unparsable string `args` → `throw` (script name, `JSON.parse` message, 300-char raw preview, hint about curly quotes „“ / unescaped `\"` and that resume does not inherit args) instead of `{}`. Non-object args → throw. Unless `dryRun: true`: `refinedQueryRu`, `refinedQueryEn`, `date`, `workDir`, `pluginRoot` must be present and non-empty (missing → throw listing the keys + typed 300-char preview + hint about `resumeFromRunId` and `dryRun:true`), and `workDir` must start with `/`. The dry-run defaults are reachable only with `dryRun: true`.
+- Required keys = what `skills/science-research/SKILL.md` Phase B always passes and whose fallback is a test value (queries, `DRYRUN-DATE`, `.search-paper/dryrun`, `.`). Enum-like keys (`framing`, `discipline`, `lang`, `guidelines`, `personalize`) and free-text context (`decisionContext`, `populationLayer`, `timeHorizon`) keep their defaults; `vaultPath` is unused by the core.
+- Caller audit: the only caller is `skills/science-research/SKILL.md` (absolute `{VAULT_PATH}/.search-paper/<id>_<slug>`); no personal workflow or skill under `~/.claude` calls the core.
+- Docs: `skills/science-research/SKILL.md` Phase B — guard paragraph; `skills/science-research/references/gotchas.md` — new entry.
+- Tests: new `tests/sp_args_guard.js` + `tests/test_sp_args_guard.py` (no args, curly-quote string, relative workDir, missing + empty key, non-object, full args pass, `dryRun:true` passes — GUARD OK); `tests/sp_dryrun.js` and `tests/sp_units.js` now pass `dryRun: true`. `node tests/sp_dryrun.js` → PROMPT_CONTRACT=ok, `node tests/sp_units.js` → UNITS OK, `pytest tests/` → 43 passed.
+- Migration: none for the skill. A hand-made or test call without the required keys must add them or pass `dryRun: true`.
+
 ## [2.3.5] — 2026-09-30 — Ловушка смоука с `--tools ""` / smoke gotcha for `--tools ""`
 
 ### Для человека
