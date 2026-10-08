@@ -3,7 +3,7 @@
 # Usage: bash tools/sync-shared.sh jadlis-search--v1.2.0
 set -euo pipefail
 TAG="${1:?usage: sync-shared.sh <jadlis-search--vX.Y.Z>}"
-REPO="https://github.com/beCyborg/jadlis-search.git"
+REPO="https://gitlab.com/beCyborg/jadlis-search.git"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

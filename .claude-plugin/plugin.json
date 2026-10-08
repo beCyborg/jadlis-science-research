@@ -1,14 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "jadlis-science-research",
-  "version": "2.3.6",
+  "version": "2.3.7",
   "displayName": "Jadlis — научный ресерч",
   "description": "PubMed, Europe PMC, Semantic Scholar, OpenAlex, arXiv, Cochrane; снежный ком по цитированиям, проверка отзыва статьи, GRADE-синтез → заметка в vault. Требует плагин jadlis-search (ключи Brave и Firecrawl).",
   "author": {
     "name": "Be Cyborg"
   },
-  "homepage": "https://github.com/beCyborg/jadlis-science-research",
-  "repository": "https://github.com/beCyborg/jadlis-science-research",
+  "homepage": "https://gitlab.com/beCyborg/jadlis-science-research",
+  "repository": "https://gitlab.com/beCyborg/jadlis-science-research",
   "keywords": [
     "jadlis",
     "science",
