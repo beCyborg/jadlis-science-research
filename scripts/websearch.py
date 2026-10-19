@@ -56,7 +56,18 @@ EXA_CATEGORIES = ["company", "people", "publication", "news", "personal site", "
 WHY = ["relevance", "freshness", "coverage", "lang", "noise"]
 BRAVE_FRESHNESS = ["pd", "pw", "pm", "py"]
 
-DAILY_CAP_USD = 2.0
+def _daily_cap():
+    # JADLIS_SEARCH_DAILY_CAP_USD: dollars per day; 0 or "off" disables the soft cap
+    raw = (os.environ.get("JADLIS_SEARCH_DAILY_CAP_USD") or "").strip().lower()
+    if raw in ("off", "none", "0", "0.0"):
+        return 0.0
+    try:
+        return float(raw) if raw else 2.0
+    except ValueError:
+        return 2.0
+
+
+DAILY_CAP_USD = _daily_cap()
 DEFAULT_TIMEOUT = 20
 MAX_N = 25
 BOTH_MAX_N = 10
@@ -293,6 +304,8 @@ def spent_today():
 
 
 def check_cap(planned, force):
+    if DAILY_CAP_USD <= 0:
+        return
     spent = spent_today()
     if not force and spent + planned >= DAILY_CAP_USD:
         die("daily soft cap %s reached (spent today %s, planned %s) — rerun with --force to override"

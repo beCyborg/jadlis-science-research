@@ -5,6 +5,17 @@
 
 ## [Unreleased]
 
+## [2.3.8] — 2026-10-19 — дневной лимит поиска выключается / daily search cap can be turned off
+
+### Для человека
+
+- Дневной лимит расходов на поиск ($2) в ресёрче теперь выключается переменной `JADLIS_SEARCH_DAILY_CAP_USD=0`, как в jadlis-search 2.2.4. Без переменной всё как раньше.
+
+### For agents
+
+- Added: `scripts/websearch.py` reads `JADLIS_SEARCH_DAILY_CAP_USD` (`0`/`off` → no daily soft cap; a number → that cap in USD; unset → $2 as before), same change as jadlis-search 2.2.4.
+- Changed: `.claude-plugin/plugin.json` version 2.3.7 → 2.3.8.
+
 ## [2.3.7] — 2026-10-08 — репозиторий переехал на GitLab / repository moved to GitLab
 
 ### Для человека
