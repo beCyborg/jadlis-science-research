@@ -1,0 +1,10 @@
+#!/bin/sh
+# Start one MCP server of this plugin.
+#   JADLIS_MCP_URL empty -> run the stdio package given as arguments (default for everyone)
+#   JADLIS_MCP_URL set   -> relay stdio to that shared Streamable HTTP server (one daemon per machine
+#                           instead of one package copy per session); see scripts/mcp-relay.py
+# Both branches exec, so no extra wrapper process stays behind.
+if [ -n "$JADLIS_MCP_URL" ]; then
+  exec python3 "$(dirname "$0")/mcp-relay.py"
+fi
+exec "$@"

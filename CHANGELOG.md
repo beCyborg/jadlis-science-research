@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+## [2.3.9] — 2026-11-04 — общие скрипты из jadlis-search 2.3.0 / shared scripts from jadlis-search 2.3.0
+
+### Для человека
+
+- Скрипты поиска обновлены из jadlis-search 2.3.0: Exa по умолчанию идёт типа `lite`, после ответа 402 серия запросов останавливается на 15 минут, у Яндекса есть запасной бэкенд Bright Data. Научные протоколы не менялись.
+- Исправлен `tools/sync-shared.sh`: старая версия удаляла собственные скрипты плагина (`chase.py`, `cocite.py`, `source-fetch.py`). Теперь они сохраняются.
+
+### For agents
+
+- Changed: `scripts/` and `shared/` re-vendored from `jadlis-search--v2.3.0` (see its CHANGELOG).
+- Fixed: `tools/sync-shared.sh` copies over `scripts/` instead of replacing it and lists the plugin-only scripts it kept (port of jadlis-research 2.9.1's fix).
+- Changed: `.claude-plugin/plugin.json` version 2.3.8 → 2.3.9.
+
 ## [2.3.8] — 2026-10-19 — дневной лимит поиска выключается / daily search cap can be turned off
 
 ### Для человека

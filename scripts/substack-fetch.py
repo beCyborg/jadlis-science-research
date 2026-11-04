@@ -5,10 +5,9 @@
 requests через uv (PEP 668: системный python без пакетов).
 
 Замена substack-mcp для чтения: полный текст постов + ПОЛНЫЕ тексты комментариев
-(у mcp комментариев нет вовсе). Discovery изданий делается через Brave
-`site:substack.com` (см. substack-protocol.md) — глобальный поиск Substack
-анонимно не работает (проверено 2026-08-15: search/explore/web игнорирует query;
-publication/search и post/search отдают ТИХИЙ ПУСТОЙ результат без 401 — ловушка).
+(у mcp комментариев нет вовсе). Поиск постов — не здесь: слепой тест 2026-11-04 (15 тем)
+поставил первым Exa lite `--include-domains substack.com`, вторым Brave `site:substack.com`;
+родной поиск Substack (post/search?includePlatformResults=true, top/search) — последний.
 
 Подкоманды:
   archive <pub> [--limit N] [--search Q] [--offset N]   лента архива: метаданные, реакции,
@@ -22,8 +21,8 @@ publication/search и post/search отдают ТИХИЙ ПУСТОЙ резу�
   notes <pub>                                           best-effort: Notes издания; деградация
                                                         честная (exit 3, не пустой успех)
 
-<pub> — канонический handle (`astralcodexten`, не кастомный домен); кастомные домены
-редиректят (301) — requests follow'ит. Кэш: ~/.cache/substack-fetch, ключ из всех argv,
+<pub> — handle (`astralcodexten`) или собственный домен издания (`www.annsmarty.com`).
+Платный пост (audience=only_paid) помечается PAYWALL_PREVIEW: тело — только бесплатное начало. Кэш: ~/.cache/substack-fetch, ключ из всех argv,
 TTL: archive/search 10 мин, post/comments/notes 30 мин.
 """
 import hashlib
@@ -51,7 +50,11 @@ def die(msg, code=1):
 
 
 def base(pub):
-    return f"https://{pub}.substack.com"
+    """Handle (`astralcodexten`) → https://<handle>.substack.com; a custom domain
+    (`www.annsmarty.com`, with or without scheme) is used as is — the old code built
+    https://www.annsmarty.com.substack.com and died with SSLError (bench 2026-11-04)."""
+    pub = re.sub(r"^https?://", "", pub.strip()).rstrip("/")
+    return f"https://{pub}" if "." in pub else f"https://{pub}.substack.com"
 
 
 def get_json(url, params=None):
@@ -140,8 +143,13 @@ def cmd_post(pub, ref):
     body = html_to_md(p.get("body_html") or "")
     if not body:
         die(f"EMPTY_BODY (пейволл? audience={p.get('audience')}): {slug}", 3)
+    paywalled = p.get("audience") == "only_paid"
+    if paywalled:
+        print("PAYWALL_PREVIEW: audience=only_paid — the body is the free preview only, "
+              "do not quote it as the full post", file=sys.stderr)
     text = (f"# {p.get('title', '?')}\n"
-            f"{pub} | id={p.get('id')} | {(p.get('post_date') or '')[:10]} | "
+            + ("> PAYWALL_PREVIEW: платный пост, ниже только бесплатное начало\n" if paywalled else "")
+            + f"{pub} | id={p.get('id')} | {(p.get('post_date') or '')[:10]} | "
             f"audience={p.get('audience')} | 💬{p.get('comment_count', 0)}\n"
             f"{p.get('canonical_url', '')}\n\n"
             f"_{(p.get('subtitle') or '').strip()}_\n\n{body}\n")

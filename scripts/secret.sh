@@ -24,7 +24,7 @@ KNOWN_KEYS_A="BRAVE_API_KEY FIRECRAWL_API_KEY REDDITAPIS_KEY YOUTUBE_API_KEY"
 KNOWN_KEYS_B="PUBMED_API_KEY PUBMED_EMAIL SEMANTIC_SCHOLAR_API_KEY OPENALEX_API_KEY \
 OPENALEX_MAILTO CROSSREF_MAILTO UNPAYWALL_EMAIL CORE_API_KEY SCITE_API_KEY \
 CONSENSUS_API_KEY EXA_API_KEY YC_SEARCH_API_KEY GOOGLE_PLACES_API_KEY \
-TAVILY_API_KEY SERPER_API_KEY WYKOP_API_KEY"
+TAVILY_API_KEY SERPER_API_KEY WYKOP_API_KEY TWITTERAPI_IO_KEY TWITTRAPI_API_KEY JINA_API_KEY BRIGHTDATA_API_KEY BRIGHTDATA_ZONE"
 
 TAB=$(printf '\t')
 SERVICES_CACHE=""
@@ -37,7 +37,7 @@ secret.sh — чтение ключей ресерч-стека Jadlis из Св
   1. переменная окружения $KEY
   2. Keychain generic password: service `jadlis`, account KEY
   3. pluginSecrets из блоба `Claude Code-credentials` (затем `Claude Code-credentials-*`)
-  4. <config-dir>/.credentials.json → .pluginSecrets["search@<marketplace>"][KEY]
+  4. <config-dir>/.credentials.json → .pluginSecrets["jadlis-search@<marketplace>"][KEY]
   5. <config-dir>/settings.json → .env[KEY]   (legacy-рельса)
 Ничего не нашли → exit 1 и пустой stdout.
 

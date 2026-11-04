@@ -5,9 +5,13 @@
 #
 # Подкоманды:
 #   search <query> [--tags T] [--by-date] [--since D] [--until D] [--points N]
-#                  [--limit N] [--page N]     T: story|comment|ask_hn|show_hn|poll|author_<u>|story_<id>
+#                  [--limit N] [--page N] [--all-words]
+#                  T: story|comment|ask_hn|show_hn|poll|author_<u>|story_<id>
+#                  relevance search: any query word may match (optionalWords); --by-date: all words,
+#                  auto-retry with optionalWords when <5 hits; --all-words forces all words everywhere
 #                  (--tags поддерживает запятую = AND, "(a,b)" = OR по правилам Algolia)
-#   thread <id> [--max-comments N]            полное дерево → markdown-файл, stdout = путь
+#   thread <id> [--breadth B]                 тред в порядке сайта (верхний уровень + до B=3 ответов, [id])
+#          [--full [--max-comments N]]        полное дерево по времени → markdown-файл, stdout = путь
 #   user <username>                           профиль + последние комментарии/посты
 #   front [top|new|best|ask|show] [--limit N] ленты Firebase (работают и при смерти Algolia)
 #   canary                                    свежесть Algolia-индекса (порог 1 ч)
@@ -18,12 +22,12 @@
 # (Firebase) продолжают работать — в отчёте канала честно помечать «поиск недоступен,
 # только ленты». Firebase умер тоже → exit 4.
 set -uo pipefail
-API="https://hn.algolia.com/api/v1"
+API="${HN_ALGOLIA_API:-https://hn.algolia.com/api/v1}"   # override only for tests
 FB="https://hacker-news.firebaseio.com/v0"
 CACHE="$HOME/.cache/hn-fetch"; mkdir -p "$CACHE"
 UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
 
-cmd="${1:-}"; [ -z "$cmd" ] && { grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -22 >&2; exit 1; }
+cmd="${1:-}"; [ -z "$cmd" ] && { grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -28 >&2; exit 1; }
 shift || true
 
 # ── кэш: ключ = подкоманда + ВСЕ аргументы (фикс бага hn-mcp) ──
@@ -59,11 +63,12 @@ canary_check() { # свежесть индекса; stderr-warning при отс
 case "$cmd" in
 search)
   q="${1:?usage: hn-fetch.sh search <query> [--tags T] [--by-date] [--since D] [--until D] [--points N] [--limit N] [--page N]}"; shift
-  tags="" bydate=0 since="" until="" points="" limit=30 page=0
+  tags="" bydate=0 since="" until="" points="" limit=30 page=0 allw=0
   while [ $# -gt 0 ]; do case "$1" in
     --tags) tags="$2"; shift 2;; --by-date) bydate=1; shift;;
     --since) since="$(epoch "$2")"; shift 2;; --until) until="$(epoch "$2")"; shift 2;;
     --points) points="$2"; shift 2;; --limit) limit="$2"; shift 2;; --page) page="$2"; shift 2;;
+    --all-words) allw=1; shift;;
     *) echo "unknown opt: $1" >&2; exit 1;; esac; done
   if cache_fresh md; then cat "$CACHE/$KEY.md"; echo "cache=hit key=$KEY" >&2; exit 0; fi
   canary_check || { echo "ALGOLIA_DOWN: поиск HN недоступен. Фоллбэк: 'hn-fetch.sh front top|ask' (Firebase-ленты) + Brave site:news.ycombinator.com; в отчёте пометь «HN-поиск недоступен»." >&2; exit 3; }
@@ -74,9 +79,16 @@ search)
   [ -n "$points" ] && nf="${nf:+$nf,}points>=$points"
   url="$API/$ep?hitsPerPage=$limit&page=$page"
   url="$url&query=$(jq -rn --arg v "$q" '$v|@uri')"
+  # Algolia requires ALL words by default: "AI search visibility GEO" → 63 hits vs 56k with optionalWords (04.11).
+  # Relevance search: any word may match (ranking still prefers more matches). By date: all words, see fallback below.
+  [ "$ep" = search ] && [ "$allw" = 0 ] && url="$url&optionalWords=$(jq -rn --arg v "$q" '$v|@uri')"
   [ -n "$tags" ] && url="$url&tags=$(jq -rn --arg v "$tags" '$v|@uri')"
   [ -n "$nf" ] && url="$url&numericFilters=$(jq -rn --arg v "$nf" '$v|@uri')"
   resp="$(jget "$url")" || { echo "ALGOLIA_DOWN: $url. Фоллбэк: front-ленты (Firebase) + Brave site:news.ycombinator.com; поиск честно помечать недоступным." >&2; exit 3; }
+  if [ "$ep" = search_by_date ] && [ "$allw" = 0 ] && [ "$(jq -r '.nbHits // 0' <<<"$resp")" -lt 5 ]; then
+    url2="$url&optionalWords=$(jq -rn --arg v "$q" '$v|@uri')"
+    resp2="$(jget "$url2")" && { resp="$resp2"; echo "NOTE: <5 hits with all words → retried with optionalWords" >&2; }
+  fi
   out="$CACHE/$KEY.md"
   jq -r --arg q "$q" --arg tags "$tags" --arg ep "$ep" "$CLEAN"'
     "# HN search: \($q) [tags=\($tags) endpoint=\($ep)]",
@@ -95,34 +107,63 @@ search)
   ;;
 
 thread)
-  id="${1:?usage: hn-fetch.sh thread <id> [--max-comments N]}"; shift
-  maxc=200
-  while [ $# -gt 0 ]; do case "$1" in --max-comments) maxc="$2"; shift 2;; *) shift;; esac; done
+  id="${1:?usage: hn-fetch.sh thread <id> [--breadth B] [--full [--max-comments N]]}"; shift
+  maxc=200 breadth=3 full=0
+  while [ $# -gt 0 ]; do case "$1" in --max-comments) maxc="$2"; shift 2;; --breadth) breadth="$2"; shift 2;;
+    --full) full=1; shift;; *) shift;; esac; done
   out="$CACHE/$KEY.md"
   if cache_fresh md; then printf '%s\n' "$out"; echo "cache=hit key=$KEY" >&2; exit 0; fi
+  # Ranked render (default): order = Firebase `kids` = the site's rank; all top-level comments + <=B replies each.
+  # Bench 2026-11-04: top-10 site comments in the first 100 lines 10/10 vs 1-4/10 for the time-ordered tree.
+  RENDER="$CLEAN"'
+    (map({key: (.id|tostring), value: .}) | from_entries) as $n
+    | def line(d): ("  " * d) + "- **\(.by)** (\(.date)) [\(.id)]: " + (.text | clean | gsub("\n+"; " ⏎ "));
+      def kids: [(.kids // [])[] | $n[tostring] // empty | select(.text != "" and .text != null)];
+    $n[$id] as $s
+    | "# \($s.title // "thread \($id)")",
+      "story \($id) | \($s.by // "?") | \($s.date // "?") | points=\($s.score // 0) | https://news.ycombinator.com/item?id=\($id)" + (if $s.url then " | \($s.url)" else "" end),
+      "", (($s.text // "") | clean | if . == "" then empty else (., "") end),
+      "## Комментарии (порядок сайта: весь верхний уровень + до \($B) ответов; полное дерево — --full)",
+      ($s | kids[] | line(0), (kids[:$B][] | line(1)))'
   if resp="$(jget "$API/items/$id")"; then
-    jq -r "$CLEAN"'
-      def node(d): ("  " * d) + "- **\(.author // "[deleted]")** (\(.created_at[:10])): " +
-        ((.text | clean) | gsub("\n+"; " ⏎ ")), (.children[]? | select(.text or .children) | node(d+1));
-      "# \(.title // "thread \(.id)")",
-      "story \(.id) | \(.author // "?") | \(.created_at[:10]) | points=\(.points // 0) | https://news.ycombinator.com/item?id=\(.id)" + (if .url then " | \(.url)" else "" end),
-      "", ((.text // "") | clean | if . == "" then empty else (. , "") end),
-      "## Комментарии (полное дерево, до '"$maxc"')",
-      ([.children[]? | node(0)] | .[:'"$maxc"'] | .[])' <<<"$resp" > "$out" 2>/dev/null \
-      || { echo "PARSE_FAIL item $id" >&2; exit 1; }
+    if [ "$full" = 1 ]; then
+      jq -r "$CLEAN"'
+        def node(d): ("  " * d) + "- **\(.author // "[deleted]")** (\(.created_at[:10])) [\(.id)]: " +
+          ((.text | clean) | gsub("\n+"; " ⏎ ")), (.children[]? | select(.text or .children) | node(d+1));
+        "# \(.title // "thread \(.id)")",
+        "story \(.id) | \(.author // "?") | \(.created_at[:10]) | points=\(.points // 0) | https://news.ycombinator.com/item?id=\(.id)" + (if .url then " | \(.url)" else "" end),
+        "", ((.text // "") | clean | if . == "" then empty else (. , "") end),
+        "## Комментарии (полное дерево по времени, до '"$maxc"')",
+        ([.children[]? | node(0)] | .[:'"$maxc"'] | .[])' <<<"$resp" > "$out" 2>/dev/null \
+        || { echo "PARSE_FAIL item $id" >&2; exit 1; }
+    else
+      # Firebase kids order for the story and for every top-level node with >=2 replies (parallel, 8 at a time)
+      fb="$(jq -r '.id, (.children[]? | select((.children | length) >= 2) | .id)' <<<"$resp" \
+        | sed "s|.*|$FB/item/&.json|" | xargs -P 8 -n 1 curl -fsSL --max-time 30 -A "$UA" 2>/dev/null \
+        | jq -s 'map(select(. != null) | {key: (.id|tostring), value: (.kids // [])}) | from_entries' 2>/dev/null)"
+      [ -n "$fb" ] || { fb='{}'; echo "FIREBASE_ORDER_MISSING: порядок по времени вместо рейтинга" >&2; }
+      jq -c --argjson fb "$fb" '
+        def flat: {id, by: (.author // "[deleted]"), date: (.created_at[:10] // ""), text: (.text // ""), title, url,
+                   score: .points, kids: ($fb[.id|tostring] // [.children[]?.id])}, (.children[]? | flat);
+        [flat]' <<<"$resp" | jq -r --arg id "$id" --argjson B "$breadth" "$RENDER" > "$out" \
+        || { echo "PARSE_FAIL item $id" >&2; exit 1; }
+    fi
   else
-    # degraded: Firebase item + первый уровень комментариев (без полного дерева)
-    item="$(jget "$FB/item/$id.json")" || { echo "HN_DOWN: и Algolia, и Firebase недоступны (item $id)" >&2; exit 4; }
-    {
-      jq -r "$CLEAN"'"# \(.title // "thread \(.id)") [DEGRADED: Algolia недоступен — только 1-й уровень комментариев]",
-        "story \(.id) | \(.by // "?") | points=\(.score // 0) | https://news.ycombinator.com/item?id=\(.id)",
-        "", ((.text // "") | clean)' <<<"$item"
-      echo "## Комментарии (Firebase, 1-й уровень, до 25)"
-      for kid in $(jq -r '(.kids // [])[:25][]' <<<"$item"); do
-        jget "$FB/item/$kid.json" | jq -r "$CLEAN"'"- **\(.by // "[deleted]")**: " + ((.text | clean) | gsub("\n+"; " ⏎ "))' 2>/dev/null
-      done
-    } > "$out"
-    echo "DEGRADED: Algolia items недоступен, дерево неполное (Firebase 1-й уровень)" >&2
+    # degraded: Algolia down → ClickHouse Playground (public HN mirror, FINAL dedup), same ranked cut
+    read -r -d '' SQL <<'SQLEOF'
+SELECT id, by, toString(toDate(time)) AS date, text, kids, title, url, score
+FROM default.hackernews_history FINAL
+WHERE (id = {id:UInt32}
+   OR id IN (SELECT arrayJoin(kids) FROM default.hackernews_history FINAL WHERE id = {id:UInt32})
+   OR id IN (SELECT arrayJoin(kids) FROM default.hackernews_history FINAL
+             WHERE id IN (SELECT arrayJoin(kids) FROM default.hackernews_history FINAL WHERE id = {id:UInt32})))
+  AND (id = {id:UInt32} OR (dead = 0 AND deleted = 0))
+FORMAT JSONEachRow
+SQLEOF
+    curl -fsS --max-time 60 -A "$UA" "https://play.clickhouse.com/?user=play&param_id=$id" --data-binary "$SQL" \
+      | jq -rs --arg id "$id" --argjson B "$breadth" "$RENDER" > "$out" 2>/dev/null && [ -s "$out" ] \
+      || { echo "HN_DOWN: Algolia и ClickHouse недоступны (item $id)" >&2; exit 4; }
+    echo "DEGRADED: Algolia items недоступен, тред собран из ClickHouse Playground" >&2
   fi
   printf '%s\n' "$out"
   n=$(grep -c '^\s*- \*\*' "$out" 2>/dev/null || echo 0)

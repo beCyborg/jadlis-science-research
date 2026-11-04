@@ -13,7 +13,8 @@ set -euo pipefail
 #
 # PRICING (official, verified 2026-08-04; с НДС):
 #   sync  0.488 ₽/req (night 00:00–07:59 MSK: 0.366) — single interactive checks ONLY
-#   async 0.0305 ₽/req (night: 0.02541) — ×16 cheaper, hence the DEFAULT mode
+#   async 0.0305 ₽/req (night: 0.02541) — ×16 cheaper, BUT since 10.2026 async runs only 00:00–06:00 MSK
+#   (vendor quota page; daytime async submits fail). Default MODE=auto: async in that window, sync otherwise.
 #   Auth/server errors are not billed. Every billed submit prints a [cost] line to stderr
 #   and appends a TSV row to <skill>/.usage.log (--no-log disables the file log).
 #
@@ -25,7 +26,11 @@ set -euo pipefail
 #     stripped with [warn] when responseFormat=FORMAT_HTML arrives via --json-patch;
 #     an HTML payload is emitted raw (parser is XML-only).
 #   - async result is stored 12 h server-side; --no-wait prints operation_id=… for a
-#     later --fetch. Quotas 10 rps (submit and poll); sleep ≥0.15 s between batch submits.
+#     later --fetch. Quota 1 rps for sync and async submit (vendor limits page, 04.11.2026) — keep
+#     ≥1 s between batch calls.
+#   - FALLBACK: YANDEX_BACKEND=auto (default) hands the query to scripts/yandex-bd.py (Bright Data SERP,
+#     same output format) when the API answers 401/402/403 and BRIGHTDATA_API_KEY is set;
+#     YANDEX_BACKEND=brightdata always uses it, =yandex never does.
 #   - stdout carries ONLY the result (or operation_id=…); all diagnostics go to stderr
 #     ([cost], [poll], [warn], [error]) — stdout is safe to pipe.
 #
@@ -45,11 +50,12 @@ err() { printf '%s\n' "$*" >&2; }
 usage() {
   cat <<'EOF'
 Usage:
-  yandex-search.sh "<query>" [options]      # async by default: submit → poll → parse
+  yandex-search.sh "<query>" [options]      # auto: async 00:00–06:00 MSK, sync otherwise
   yandex-search.sh --fetch <operation-id>   # retrieve earlier async result (12 h window)
 
 API options:
-  --sync                sync call (0.488 ₽ vs 0.0305 ₽ async — single interactive checks only)
+  --sync                force sync (0.488 ₽/req; the only mode that works in the daytime)
+  --async               force async (0.0305 ₽/req; works only 00:00–06:00 MSK)
   -t, --type X          ru|com|tr|kk|be|uz (default ru)
   -r, --region N        region id, ru|tr only (default 225=РФ; 213=Москва, 2=СПб)
   -p, --page N          results page, 0-based (default 0)
@@ -85,11 +91,12 @@ Env:
                         falls back to scripts/secret.sh (Keychain) when the env var is unset
   YC_FOLDER_ID          optional; folderId is derived from the key if omitted
   YC_OPERATION_HOST     optional override of the operation-polling host
+  YANDEX_BACKEND        auto (default: API, Bright Data on 401/402/403) | yandex | brightdata
 EOF
 }
 
 # ---------- parse arguments ----------
-MODE=async
+MODE=auto
 QUERY=""
 OP_ID=""
 TYPE=ru
@@ -121,6 +128,7 @@ POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --sync)          MODE=sync ;;
+    --async)         MODE=async ;;
     --fetch)         MODE=fetch; OP_ID="${2:?--fetch requires <operation-id>}"; shift ;;
     -t|--type)       TYPE="${2:?}"; shift ;;
     -r|--region)     REGION="${2:?}"; REGION_EXPLICIT=1; shift ;;
@@ -288,6 +296,21 @@ if [[ "$MODE" != "fetch" ]]; then
   fi
 fi
 
+if [[ "$MODE" == "auto" ]]; then
+  if (( 10#$(TZ=Europe/Moscow date +%H) < 6 )); then MODE=async; else MODE=sync; fi
+fi
+
+bd_fallback() { # $1 reason → exec Bright Data backend with the same query/output options
+  err "[fallback] $1 — Yandex SERP via Bright Data (scripts/yandex-bd.py)"
+  exec python3 "$SCRIPT_DIR/yandex-bd.py" "$QUERY" --region "$REGION" --page "${PAGE:-0}" \
+    --num "$NUM" --out "$OUT" --passage-chars "$PASSAGE_CHARS"
+}
+BD_KEY_PRESENT=0
+if [[ -n "${BRIGHTDATA_API_KEY:-}" ]] || bash "$SCRIPT_DIR/secret.sh" BRIGHTDATA_API_KEY >/dev/null 2>&1; then BD_KEY_PRESENT=1; fi
+if [[ "${YANDEX_BACKEND:-auto}" == "brightdata" && "$MODE" != "fetch" && $DRY_RUN -eq 0 ]]; then
+  bd_fallback "YANDEX_BACKEND=brightdata"
+fi
+
 if [[ "$MODE" == "sync" ]]; then
   ENDPOINT="$API_HOST/v2/web/search"
 else
@@ -306,6 +329,7 @@ if [[ -z "${YC_SEARCH_API_KEY:-}" ]]; then
 fi
 if [[ -z "${YC_SEARCH_API_KEY:-}" ]]; then
   err "[error] YC_SEARCH_API_KEY not set — store it in the macOS Keychain via the skill /jadlis-search:keys (secret.sh --set YC_SEARCH_API_KEY); Yandex Cloud Api-Key, role search-api.webSearch.user"
+  if [[ "${YANDEX_BACKEND:-auto}" == "auto" && $BD_KEY_PRESENT -eq 1 ]]; then bd_fallback "no YC_SEARCH_API_KEY"; fi
   exit 2
 fi
 AUTH_HDR="Authorization: Api-Key ${YC_SEARCH_API_KEY}"
@@ -342,6 +366,9 @@ submit() { # POST $ENDPOINT with $BODY → $RESP_FILE; exits 3 on non-200
     err "[error] API HTTP $code:"
     cat "$RESP_FILE" >&2 || true
     err ""
+    if [[ "$code" =~ ^(401|402|403)$ && "${YANDEX_BACKEND:-auto}" == "auto" && $BD_KEY_PRESENT -eq 1 ]]; then
+      bd_fallback "Yandex Search API HTTP $code (billing suspended, role or key)"
+    fi
     exit 3
   fi
 }

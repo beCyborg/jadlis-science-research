@@ -51,7 +51,7 @@ LOG_PATH = os.path.expanduser(os.environ.get("WEBSEARCH_LOG", "~/.claude/telemet
 SELF = "python3 %s" % os.path.abspath(__file__)
 
 TAGS = ["research", "sources", "news", "code", "people", "company", "product", "other"]
-EXA_TYPES = ["auto", "fast", "instant", "deep-lite", "deep", "deep-reasoning", "keyword", "neural"]
+EXA_TYPES = ["lite", "auto", "fast", "instant", "deep-lite", "deep", "deep-reasoning", "keyword", "neural"]
 EXA_CATEGORIES = ["company", "people", "publication", "news", "personal site", "financial report"]
 WHY = ["relevance", "freshness", "coverage", "lang", "noise"]
 BRAVE_FRESHNESS = ["pd", "pw", "pm", "py"]
@@ -74,7 +74,7 @@ BOTH_MAX_N = 10
 BRAVE_MAX_N = 20
 BRAVE_WEB_COST = 0.005      # receipt #2482-5413: "Search (per request) $0.005 each"
 BRAVE_CTX_COST = 0.005      # assumed (not on the receipt)
-EXA_SEARCH_COST = {"deep-lite": 0.012, "deep": 0.012, "deep-reasoning": 0.015}
+EXA_SEARCH_COST = {"lite": 0.004, "deep-lite": 0.012, "deep": 0.012, "deep-reasoning": 0.015}
 EXA_SEARCH_DEFAULT_COST = 0.007
 EXA_EXTRA_RESULT_COST = 0.001
 EXA_PAGE_COST = 0.001
@@ -319,8 +319,70 @@ class TimeoutErr(Exception):
     pass
 
 
+RETRY_429 = 2          # extra attempts after HTTP 429 (SKILL.md: "wait 1 s, retry, max 2")
+RETRY_429_WAIT_MAX = 5  # seconds; a longer Retry-After is not waited for
+
+
+STOP_402_MIN = 15  # after HTTP 402 (quota/usage limit) the host is not called again for this many minutes
+
+
+def _stop_file(url):
+    host = urllib.parse.urlsplit(url).netloc or "unknown"
+    d = os.path.expanduser(os.environ.get("JADLIS_SEARCH_STOP_DIR", "~/.cache/jadlis-search"))
+    return os.path.join(d, "stop-402-%s" % host)
+
+
+def _stop_active(url):
+    f = _stop_file(url)
+    try:
+        age = time.time() - os.path.getmtime(f)
+    except OSError:
+        return None
+    return age if age < STOP_402_MIN * 60 else None
+
+
+def _stop_trip(url):
+    f = _stop_file(url)
+    try:
+        os.makedirs(os.path.dirname(f), exist_ok=True)
+        with open(f, "w") as fh:
+            fh.write(_dt.datetime.now().isoformat(timespec="seconds"))
+    except OSError:
+        pass
+
+
 def http_json(method, url, headers, body=None, timeout=DEFAULT_TIMEOUT):
-    """Returns (status, parsed_json_or_text, latency_ms). Raises TimeoutErr on timeout."""
+    """Returns (status, parsed_json_or_text, latency_ms). Raises TimeoutErr on timeout.
+    HTTP 429 is retried up to RETRY_429 times (wait = Retry-After if ≤ RETRY_429_WAIT_MAX, else 1 s).
+    HTTP 402 (usage limit / no credit) stops the series: for STOP_402_MIN minutes the same host gets
+    no network call and every call returns 402 at once (30.10.2026: 888 Brave calls in one hour after 402)."""
+    age = _stop_active(url)
+    if age is not None:
+        host = urllib.parse.urlsplit(url).netloc
+        msg = ("STOP: %s answered HTTP 402 %d min ago — no calls for %d min. Switch engine or top up; "
+               "delete %s to retry now" % (host, int(age // 60), STOP_402_MIN, _stop_file(url)))
+        return 402, {"error": msg}, 0
+    total = 0
+    for attempt in range(RETRY_429 + 1):
+        status, parsed, latency, retry_after = _http_json_once(method, url, headers, body, timeout)
+        total += latency
+        if status == 402:
+            _stop_trip(url)
+        if status != 429 or attempt == RETRY_429:
+            return status, parsed, total
+        wait = 1.0
+        try:
+            if retry_after and 0 < float(retry_after) <= RETRY_429_WAIT_MAX:
+                wait = float(retry_after)
+        except ValueError:
+            pass
+        err("[warn] HTTP 429 — retry %d/%d in %.1f s" % (attempt + 1, RETRY_429, wait))
+        time.sleep(wait)
+    return status, parsed, total
+
+
+def _http_json_once(method, url, headers, body, timeout):
+    """One HTTP attempt: (status, parsed_json_or_text, latency_ms, retry_after_header)."""
     data = None
     hdrs = dict(headers)
     hdrs.setdefault("Accept", "application/json")
@@ -336,10 +398,12 @@ def http_json(method, url, headers, body=None, timeout=DEFAULT_TIMEOUT):
             raw = resp.read()
             status = resp.status
             enc = resp.headers.get("Content-Encoding", "")
+            retry_after = None
     except urllib.error.HTTPError as e:
         raw = e.read()
         status = e.code
         enc = e.headers.get("Content-Encoding", "") if e.headers else ""
+        retry_after = e.headers.get("Retry-After") if e.headers else None
     except (socket.timeout, TimeoutError):
         raise TimeoutErr()
     except urllib.error.URLError as e:
@@ -357,7 +421,7 @@ def http_json(method, url, headers, body=None, timeout=DEFAULT_TIMEOUT):
         parsed = json.loads(text) if text.strip() else {}
     except ValueError:
         parsed = text
-    return status, parsed, latency
+    return status, parsed, latency, retry_after
 
 
 def cost_total(parsed):
@@ -413,12 +477,24 @@ def norm_exa_result(r):
             "snippet": snippet or "", "domain": domain_of(r.get("url") or r.get("id") or "")}
 
 
+ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def brave_date(v):
+    """Brave `age`/`page_age` -> YYYY-MM-DD or "". llm/context sends a list of renderings
+    (["Wednesday, January 08, 2025", "2025-01-08", "636 days ago", "2025-01-08T13:37:18Z"]) or []."""
+    for s in (v if isinstance(v, list) else [v]):
+        if isinstance(s, str) and ISO_DATE_RE.match(s):
+            return s[:10]
+    return ""
+
+
 def norm_brave_web(r):
     snippet = strip_html(r.get("description") or "")
     if not snippet and r.get("extra_snippets"):
         snippet = r["extra_snippets"][0]
-    date = r.get("page_age") or r.get("age") or ""
-    return {"title": strip_html(r.get("title") or ""), "url": r.get("url") or "", "date": date[:10],
+    date = brave_date(r.get("page_age")) or brave_date(r.get("age"))
+    return {"title": strip_html(r.get("title") or ""), "url": r.get("url") or "", "date": date,
             "snippet": snippet, "domain": domain_of(r.get("url") or "")}
 
 
@@ -426,7 +502,7 @@ def norm_brave_ctx(g, sources):
     url = g.get("url") or ""
     src = (sources or {}).get(url) or {}
     snippet = (g.get("snippets") or [""])[0]
-    return {"title": g.get("title") or src.get("title") or "", "url": url, "date": (src.get("age") or "")[:10],
+    return {"title": g.get("title") or src.get("title") or "", "url": url, "date": brave_date(src.get("age")),
             "snippet": snippet, "domain": domain_of(url)}
 
 
@@ -669,10 +745,18 @@ def validate_exa_args(a, max_n=MAX_N):
     valid_date(a.start, "--start")
     valid_date(a.end, "--end")
     if a.type in ("keyword", "neural"):
-        err("[warn] type %r is legacy (not in the documented enum) — on HTTP 400 retry with --type auto" % a.type)
+        err("[warn] type %r is legacy (not in the documented enum; lost 0:14 to auto on Russian queries) — use --type lite or auto" % a.type)
+    if any("reddit.com" in d for d in (csv_list(a.include_domains) or [])):
+        err("[warn] Exa does not index reddit.com (0 results, 2026-11-04) — use `brave \"<q> site:reddit.com\"` or the Reddit MCP")
+
+
+def require_query(a):
+    if not (getattr(a, "query", "") or "").strip():
+        die("empty query — nothing to search (the API would answer 400)")
 
 
 def cmd_exa(a):
+    require_query(a)
     validate_exa_args(a)
     body = exa_search_body(a)
     if a.dry_run:
@@ -681,7 +765,7 @@ def cmd_exa(a):
         return EXIT_OK
     key = exa_key()
     if not key:
-        die("EXA_API_KEY not set — add `export EXA_API_KEY=…` to ~/.zshenv (or ~/.config/exa/key)", EXIT_NOKEY)
+        die("EXA_API_KEY not set — store it in the macOS Keychain: bash scripts/secret.sh --set EXA_API_KEY (or /jadlis-search:keys)", EXIT_NOKEY)
     check_cap(exa_estimate(body), a.force)
     r = run_exa_search(body, key, a.timeout)
     cost_line(r, a.query)
@@ -689,13 +773,14 @@ def cmd_exa(a):
     if not r["ok"]:
         err("[error] exa: %s" % r["err"])
         if r["http"] == 400 and body.get("type") in ("keyword", "neural"):
-            err("[hint] legacy type rejected — retry with --type auto")
+            err("[hint] legacy type rejected — retry with --type lite")
         return exit_for(r)
     print_single(r, a)
     return EXIT_OK
 
 
 def cmd_brave(a):
+    require_query(a)
     if a.n < 1 or a.n > BRAVE_MAX_N:
         die("-n must be 1..%d for Brave" % BRAVE_MAX_N)
     if a.freshness and a.freshness not in BRAVE_FRESHNESS and not re.match(r"^\d{4}-\d{2}-\d{2}to\d{4}-\d{2}-\d{2}$", a.freshness):
@@ -707,9 +792,13 @@ def cmd_brave(a):
         return EXIT_OK
     key = brave_key()
     if not key:
-        die("BRAVE_API_KEY not set — add `export BRAVE_API_KEY=…` to ~/.zshenv", EXIT_NOKEY)
+        die("BRAVE_API_KEY not set — store it in the macOS Keychain: bash scripts/secret.sh --set BRAVE_API_KEY (or /jadlis-search:keys)", EXIT_NOKEY)
     check_cap(BRAVE_WEB_COST if a.mode == "web" else BRAVE_CTX_COST, a.force)
     r = run_brave(a.mode, params, key, a.timeout)
+    if r["http"] == 422 and (params.get("country") or params.get("search_lang")):
+        err("[warn] brave 422 with country=%s search_lang=%s — retrying without them" % (params.get("country"), params.get("search_lang")))
+        params.pop("country", None); params.pop("search_lang", None)
+        r = run_brave(a.mode, params, key, a.timeout)
     cost_line(r, a.query)
     log_event(call_record(r, "brave", a.query, a.tag), not a.no_log)
     if not r["ok"]:
@@ -720,6 +809,7 @@ def cmd_brave(a):
 
 
 def cmd_both(a):
+    require_query(a)
     if a.n > BOTH_MAX_N:
         err("[warn] both caps -n at %d (was %d)" % (BOTH_MAX_N, a.n))
         a.n = BOTH_MAX_N
@@ -741,7 +831,7 @@ def cmd_both(a):
         return EXIT_OK
     ek, bk = exa_key(), brave_key()
     if not ek and not bk:
-        die("neither EXA_API_KEY nor BRAVE_API_KEY is set (~/.zshenv)", EXIT_NOKEY)
+        die("neither EXA_API_KEY nor BRAVE_API_KEY is set — store them in the macOS Keychain: /jadlis-search:keys", EXIT_NOKEY)
     planned = exa_estimate(body) + (BRAVE_WEB_COST if a.mode == "web" else BRAVE_CTX_COST)
     check_cap(planned, a.force)
     pair_id = uuid.uuid4().hex[:8]
@@ -838,7 +928,7 @@ def cmd_contents(a):
         return EXIT_OK
     key = exa_key()
     if not key:
-        die("EXA_API_KEY not set — add `export EXA_API_KEY=…` to ~/.zshenv", EXIT_NOKEY)
+        die("EXA_API_KEY not set — store it in the macOS Keychain: bash scripts/secret.sh --set EXA_API_KEY (or /jadlis-search:keys)", EXIT_NOKEY)
     est = EXA_PAGE_COST * len(urls) * (1 + (a.subpages or 0))
     check_cap(est, a.force)
     r = mk_result("exa", mode, "contents", len(urls))
@@ -930,7 +1020,7 @@ def cmd_context(a):
         return EXIT_OK
     key = exa_key()
     if not key:
-        die("EXA_API_KEY not set — add `export EXA_API_KEY=…` to ~/.zshenv", EXIT_NOKEY)
+        die("EXA_API_KEY not set — store it in the macOS Keychain: bash scripts/secret.sh --set EXA_API_KEY (or /jadlis-search:keys)", EXIT_NOKEY)
     check_cap(EXA_SEARCH_DEFAULT_COST, a.force)
     r = mk_result("exa", str(tokens), "context", 1)
     try:
@@ -1194,7 +1284,7 @@ def add_common(p, outs=("text", "json", "urls"), default_out="text"):
     p.add_argument("--dry-run", action="store_true", help="print request(s) and exit — no HTTP, no key, no log")
     p.add_argument("--no-log", action="store_true", help="do not append to the A/B log")
     p.add_argument("--full", action="store_true", help="lift output caps (titles/snippets/text)")
-    p.add_argument("--force", action="store_true", help="bypass the daily soft cap ($%.0f)" % DAILY_CAP_USD)
+    p.add_argument("--force", action="store_true", help="bypass the daily soft cap ($%.0f; set JADLIS_SEARCH_DAILY_CAP_USD=0 to disable)" % DAILY_CAP_USD)
     p.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="per-engine timeout, s (default %d)" % DEFAULT_TIMEOUT)
 
 
@@ -1207,7 +1297,8 @@ def build_parser():
     e = sub.add_parser("exa", help="Exa /search")
     e.add_argument("query")
     e.add_argument("--tag", required=True, choices=TAGS)
-    e.add_argument("--type", default="auto", choices=EXA_TYPES)
+    e.add_argument("--type", default="lite", choices=EXA_TYPES,
+                   help="search type (default lite: same quality as auto on 50 real queries, 2026-11 blind test, $4 vs $7 per 1k; keyword/neural are legacy)")
     e.add_argument("--category", choices=EXA_CATEGORIES)
     e.add_argument("--include-domains", help="a.com,b.org")
     e.add_argument("--exclude-domains")
@@ -1241,7 +1332,7 @@ def build_parser():
     bo.add_argument("--tag", required=True, choices=TAGS)
     bo.add_argument("--query-exa", help="separate page-description query for Exa")
     bo.add_argument("-n", type=int, default=8)
-    bo.add_argument("--type", default="auto", choices=EXA_TYPES, help="Exa type")
+    bo.add_argument("--type", default="lite", choices=EXA_TYPES, help="Exa type (default lite, Russian queries too; keyword/neural are legacy)")
     bo.add_argument("--mode", default="web", choices=["web", "context"], help="Brave mode")
     bo.add_argument("--country")
     bo.add_argument("--lang", help="Brave search_lang")
