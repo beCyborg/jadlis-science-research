@@ -7,7 +7,7 @@
 заголовка.
 
 ```
-claude plugin marketplace add https://gitlab.com/beCyborg/jadlis-hub.git
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub.git
 claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
 claude plugin install jadlis-science-research@jadlis
 ```
@@ -62,7 +62,7 @@ Crossref на отзыв и на совпадение заголовка, зат
 ```
 Ты — установщик. Поставь на этот Mac плагин jadlis-science-research из маркетплейса jadlis.
 Выполни ровно эти команды, дословно, ничего не сокращая:
-1. claude plugin marketplace add https://gitlab.com/beCyborg/jadlis-hub.git
+1. claude plugin marketplace add https://github.com/beCyborg/jadlis-hub.git
 2. claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
 3. claude plugin install jadlis-science-research@jadlis
 4. claude plugin list — покажи мне строки про jadlis-search и jadlis-science-research и их версии.
@@ -80,7 +80,7 @@ Crossref на отзыв и на совпадение заголовка, зат
 **б) Команды руками.**
 
 ```
-claude plugin marketplace add https://gitlab.com/beCyborg/jadlis-hub.git
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub.git
 claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
 claude plugin install jadlis-science-research@jadlis
 claude plugin list

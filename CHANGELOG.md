@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+## [2.3.10] — 2026-11-06 — репозиторий снова на GitHub / repository back on GitHub
+
+### Для человека
+
+- Плагин снова живёт на GitHub: https://github.com/beCyborg/jadlis-science-research. Каталог ставится командой `claude plugin marketplace add https://github.com/beCyborg/jadlis-hub.git`.
+- Работа плагина не изменилась.
+
+### For agents
+
+- Changed: `README.md`, `README.en.md`, `.claude-plugin/plugin.json` (`homepage`/`repository`) — GitLab URLs → `https://github.com/beCyborg/…`.
+- Changed: `tools/sync-shared.sh` — clones `jadlis-search` from `https://github.com/beCyborg/jadlis-search.git`.
+- Changed: CI `.gitlab-ci.yml` → `.github/workflows/ci.yml` (reusable `beCyborg/jadlis-hub` plugin-ci).
+- Changed: `.claude-plugin/plugin.json` version 2.3.9 → 2.3.10.
+
 ## [2.3.9] — 2026-11-04 — общие скрипты из jadlis-search 2.3.0 / shared scripts from jadlis-search 2.3.0
 
 ### Для человека

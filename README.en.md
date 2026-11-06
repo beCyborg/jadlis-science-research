@@ -7,7 +7,7 @@ Crossref for retraction and for a matching title, and the conclusion is graded w
 strength of the evidence, not the loudness of the headline.
 
 ```
-claude plugin marketplace add https://gitlab.com/beCyborg/jadlis-hub.git
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub.git
 claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
 claude plugin install jadlis-science-research@jadlis
 ```
@@ -64,7 +64,7 @@ the bottom — where they are actually checked.
 ```
 You are an installer. Install the jadlis-science-research plugin from the jadlis marketplace on this Mac.
 Run exactly these commands, verbatim, without shortening anything:
-1. claude plugin marketplace add https://gitlab.com/beCyborg/jadlis-hub.git
+1. claude plugin marketplace add https://github.com/beCyborg/jadlis-hub.git
 2. claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
 3. claude plugin install jadlis-science-research@jadlis
 4. claude plugin list — show me the lines for jadlis-search and jadlis-science-research and their versions.
@@ -83,7 +83,7 @@ Never print key values: report only "present" or "missing".
 **b) Commands by hand.**
 
 ```
-claude plugin marketplace add https://gitlab.com/beCyborg/jadlis-hub.git
+claude plugin marketplace add https://github.com/beCyborg/jadlis-hub.git
 claude plugin install jadlis-search@jadlis --config BRAVE_API_KEY=… --config FIRECRAWL_API_KEY=…
 claude plugin install jadlis-science-research@jadlis
 claude plugin list
