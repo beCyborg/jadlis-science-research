@@ -1,6 +1,6 @@
 ---
 name: synth-opus
-description: "Workflow-only synthesis role on Opus 5.5 at effort xhigh — the default synthesiser (synth-fable, Opus 5.5 high, only with fableBridge:true or as the retry); never invoke manually."
+description: "Workflow-only synthesis role on Opus 5.5 at effort xhigh — the default synthesiser, and the Opus retry after a null answer (at effort high after its own null, set per call); synth-fable (Fable 5.2 high) only with finalOpts or fableBridge:true; never invoke manually."
 tools: Read, Write, Glob
 model: claude-opus-5-5
 effort: xhigh

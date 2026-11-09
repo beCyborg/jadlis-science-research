@@ -87,18 +87,30 @@ const w = extra => Object.assign({}, WORKER_OPTS, extra)
 // существовал только ради обхода собственной CLAUDE_CODE_SUBAGENT_MODEL_FORCE, снятой 07.09.2026.
 // Агенты synth-* пиннят модель, effort и allow-лист инструментов (у agent() нет опции allowedTools).
 // С 2.3.0 по умолчанию synth-opus (Opus 5.5 xhigh): GDPval-AA 1820 против 1617 у Fable 5.1 high,
-// меньше ответов наугад, дешевле за задачу и без недельного лимита Fable. fableBridge:true
-// выбирает synth-fable. С 2.3.3 (29.09.2026) synth-fable тоже Opus 5.5, effort high: Fable 5.1
-// больше не используется, имя агента и флаг `fableBridge` исторические. При null — один повтор
-// на другой роли synth-* (xhigh ↔ high), в обе стороны.
+// меньше ответов наугад, дешевле за задачу и без недельного лимита Fable.
+// 2.4.0 (09.11.2026): synth-fable снова на Fable 5.2, effort high. До него доходят только по явному
+// выбору: args.finalOpts {model, effort} — скилл берёт их из ЛИЧНОГО файла
+// ~/.claude/skills/_shared/final-agent.json (scripts/final-agent.py), поэтому получатель без файла
+// на Fable не попадает, — или args.fableBridge:true (модель и effort из frontmatter). finalOpts идут
+// в вызов и перебивают frontmatter synth-fable. Тот же finalOpts получает критик (Adversarial).
+// При null — один повтор, всегда на Opus 5.5: после Fable — synth-opus (xhigh), после synth-opus —
+// synth-opus с effort high (до 2.4.0 это был synth-fable, тогда тоже Opus 5.5 high). На Fable не повторяем.
 // Имя аргумента остаётся `fableBridge` — один словарь на все восемь воркфлоу.
-const FABLE_SYNTH = A.fableBridge === true
-const SYNTH_AGENT = FABLE_SYNTH ? 'jadlis-science-research:synth-fable' : 'jadlis-science-research:synth-opus'
-const SYNTH_AGENT_RETRY = FABLE_SYNTH ? 'jadlis-science-research:synth-opus' : 'jadlis-science-research:synth-fable'
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+const FINAL_OPTS = (A.finalOpts && typeof A.finalOpts === 'object' && /^claude-[a-z0-9-]+$/.test(String(A.finalOpts.model || '')) && EFFORTS.includes(A.finalOpts.effort))
+  ? { model: A.finalOpts.model, effort: A.finalOpts.effort } : null
+const FABLE_SYNTH = A.fableBridge === true || !!FINAL_OPTS
+// role: { agentType, model, effort?, perCall?, name } — model в вызов только для finalOpts (perCall).
+const SYNTH_OPUS = { agentType: 'jadlis-science-research:synth-opus', model: 'claude-opus-5-5', name: 'Opus 5.5 xhigh (synth-opus)' }
+const SYNTH_OPUS_HIGH = { agentType: 'jadlis-science-research:synth-opus', model: 'claude-opus-5-5', effort: 'high', name: 'Opus 5.5 high (synth-opus)' }
+const SYNTH_FABLE = FINAL_OPTS
+  ? { agentType: 'jadlis-science-research:synth-fable', model: FINAL_OPTS.model, effort: FINAL_OPTS.effort, perCall: true, name: `${FINAL_OPTS.model} ${FINAL_OPTS.effort} (synth-fable, final-agent.json)` }
+  : { agentType: 'jadlis-science-research:synth-fable', model: 'claude-fable-5-2', name: 'Fable 5.2 high (synth-fable)' }
+const SYNTH_FIRST = FABLE_SYNTH ? SYNTH_FABLE : SYNTH_OPUS
+const SYNTH_RETRY = FABLE_SYNTH ? SYNTH_OPUS : SYNTH_OPUS_HIGH
 // ai_model отчёта печатается по тому, что реально исполнилось, а не по догадке вызывающего.
-// Обе роли synth-* с 2.3.3 на Opus 5.5 — значения совпадают, развилка оставлена на случай смены модели.
-const AI_MODEL = 'claude-opus-5-5'
-const AI_MODEL_RETRY = 'claude-opus-5-5'
+const AI_MODEL = SYNTH_FIRST.model
+const AI_MODEL_RETRY = SYNTH_RETRY.model
 
 
 // ── Константы always-deep (saturation/cap/budget гейты вместо tiered-режима) ──
@@ -1274,20 +1286,20 @@ const enrichFiles = doiBatches.map((_, i) => `${WORK_DIR}/enrich_${i}.md`)
 const synthFiles = [...sourceFiles, `${WORK_DIR}/_seed.md`, ...(addedByCocite ? [`${WORK_DIR}/cocite.md`] : []), ...snowballFiles, ...enrichFiles, ...fulltextFiles]
 // Опции собираются явно, НЕ через w(): переданный вызывающим workerOpts.model пережил бы
 // слияние и побил frontmatter агента (per-invocation модель приоритетнее).
-const synthOpts = (label, agentType) => ({ label, phase: 'Synthesize', schema: SYNTH, agentType })
+const synthOpts = (label, role) => Object.assign({ label, phase: 'Synthesize', schema: SYNTH, agentType: role.agentType },
+  role.perCall ? { model: role.model } : {}, role.effort ? { effort: role.effort } : {})
 
 let synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL, coverage),
-  synthOpts(FABLE_SYNTH ? 'synth→fable' : 'synth', SYNTH_AGENT))
+  synthOpts(FABLE_SYNTH ? 'synth→fable' : 'synth', SYNTH_FIRST))
 
-// Одна попытка на другой роли synth-*, в обе стороны: synth-opus (xhigh) ↔ synth-fable (high).
-// С 2.3.3 обе на Opus 5.5 — повтор той же модели с другим effort: от сессионного лимита или
-// случайного сбоя спасает, от отказа классификатора на серой теме может и не спасти.
+// Одна попытка на Opus 5.5 (2.4.0): после synth-fable — synth-opus (xhigh), после synth-opus — он же с
+// effort high. Повтор после Fable спасает и от отказа её классификатора, и от лимита Fable.
 let synthFellBack = false
 if (!synth) {
-  const [from, to] = FABLE_SYNTH ? ['Opus 5.5 high (synth-fable)', 'Opus 5.5 xhigh (synth-opus)'] : ['Opus 5.5 xhigh (synth-opus)', 'Opus 5.5 high (synth-fable)']
+  const [from, to] = [SYNTH_FIRST.name, SYNTH_RETRY.name]
   log(`synth (${from}) вернул null — одна попытка на ${to}.`)
   synth = await agent(synthPrompt(synthFiles, enrichItems, allPapers.length, addedBySnowball, AI_MODEL_RETRY, coverage),
-    synthOpts(FABLE_SYNTH ? 'synth→opus-retry' : 'synth→fable-retry', SYNTH_AGENT_RETRY))
+    synthOpts(FABLE_SYNTH ? 'synth→opus-retry' : 'synth→opus-high-retry', SYNTH_RETRY))
   synthFellBack = true
 }
 // Ранний выход обязателен: без него прогон молча уходит в Adversarial и возвращает
@@ -1304,7 +1316,16 @@ log(`Синтез готов: ${reportPath}. Evidence=${synth?.evidenceStrengthM
 
 // ── Phase Adversarial ──
 phase('Adversarial')
-const adversarial = await agent(adversarialPrompt(reportPath, synth?.keyDois || [], coverage), w({ label: 'adversarial', phase: 'Adversarial', schema: ADVERSARIAL, effort: 'xhigh' }))
+// Критик — финальный агент цепочки: finalOpts (личный final-agent.json) → его модель и effort в вызове,
+// иначе Opus 5.5 xhigh. Пустой ответ или исключение на finalOpts → один повтор на Opus 5.5 xhigh (2.4.0).
+const advOpts = extra => w(Object.assign({ phase: 'Adversarial', schema: ADVERSARIAL, effort: 'xhigh' }, extra))
+let adversarial = await agent(adversarialPrompt(reportPath, synth?.keyDois || [], coverage),
+  FINAL_OPTS ? advOpts({ label: 'adversarial→final', model: FINAL_OPTS.model, effort: FINAL_OPTS.effort }) : advOpts({ label: 'adversarial' }))
+  .catch(e => { if (!FINAL_OPTS) throw e; log(`Критик (${FINAL_OPTS.model}) упал: ${String((e && e.message) || e).slice(0, 200)}`); return null })
+if (!adversarial && FINAL_OPTS) {
+  log(`Критик на ${FINAL_OPTS.model} не ответил — один повтор на Opus 5.5 xhigh.`)
+  adversarial = await agent(adversarialPrompt(reportPath, synth?.keyDois || [], coverage), advOpts({ label: 'adversarial→opus-retry' }))
+}
 const edits = (adversarial?.edits || [])
 // Работы, названные критиком отсутствующими, идут в fix отдельным списком: раньше они жили только
 // в тексте разбора, а fix-агент читает структурированный ответ — так терялась Kanobe 2025.

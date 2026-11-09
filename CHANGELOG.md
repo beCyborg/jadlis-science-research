@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-11-09 — синтез и критик из личного файла / synthesis and critic from a personal file
+
+### Для человека
+- Синтез и критик могут работать на модели из личного файла `~/.claude/skills/_shared/final-agent.json` (например, Fable 5.2 · high). Нет файла — всё как раньше: Opus 5.5 · xhigh.
+- Пустой ответ синтеза или критика повторяется один раз на Opus 5.5, никогда на Fable.
+
+### For agents
+- Added: `scripts/final-agent.py`; `args.finalOpts` in `workflows/search-paper-core.js` → synth on `synth-fable` and the adversarial critic with per-call `model` + `effort`; null/throw on finalOpts → one retry on Opus 5.5 (`synth→opus-retry`, `adversarial→opus-retry`).
+- Changed: `agents/synth-fable.md` → `claude-fable-5-2` · high; default-branch retry → `synth-opus` with per-call `effort: 'high'` (`synth→opus-high-retry`; was `synth-fable`).
+- Changed: `skills/science-research/SKILL.md` — step 6 reads final-agent.py, `finalOpts` in args; `model:`/`effort:` removed from the frontmatter.
+- Removed: `JINA_API_KEY` from the `scripts/secret.sh` allow-list.
+- Tests: `tests/sp_final_opts.js` + `test_sp_final_opts.py`; `sp_units.js` A10 cases updated.
+
 ## [2.3.10] — 2026-11-06 — репозиторий снова на GitHub / repository back on GitHub
 
 ### Для человека

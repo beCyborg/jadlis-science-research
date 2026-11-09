@@ -154,11 +154,13 @@ const SOURCES = ['pubmed', 'europepmc', 'openalex']
   ok('capHitSnowball: потолок во время snowball взводит флаг', res.capStats.capHitSnowball === true, res.capStats)
   ok('capHitSnowball: корпус не превысил потолок', res.papersTotal <= 20 + res.capStats.sideRecords, res.papersTotal)
 
-  // ── A10: синтез по умолчанию на synth-opus, повтор при null — на другой роли synth-*, в обе стороны (с 2.3.3 обе на Opus 5.5) ──
+  // ── A10: синтез по умолчанию на synth-opus; synth-fable (Fable 5.2) только по finalOpts / fableBridge:true;
+  //    повтор при null — всегда на synth-opus, Opus 5.5 (2.4.0; полный разбор опций — sp_final_opts.js) ──
   const SP = 'jadlis-science-research:'
   const cases = [
-    { name: 'по умолчанию', args: {}, first: [SP + 'synth-opus', 'claude-opus-5-5'], retry: [SP + 'synth-fable', 'claude-opus-5-5'], retryLabel: 'synth→fable-retry' },
-    { name: 'fableBridge:true', args: { fableBridge: true }, first: [SP + 'synth-fable', 'claude-opus-5-5'], retry: [SP + 'synth-opus', 'claude-opus-5-5'], retryLabel: 'synth→opus-retry' },
+    { name: 'по умолчанию', args: {}, first: [SP + 'synth-opus', 'claude-opus-5-5'], retry: [SP + 'synth-opus', 'claude-opus-5-5'], retryLabel: 'synth→opus-high-retry' },
+    { name: 'fableBridge:true', args: { fableBridge: true }, first: [SP + 'synth-fable', 'claude-fable-5-2'], retry: [SP + 'synth-opus', 'claude-opus-5-5'], retryLabel: 'synth→opus-retry' },
+    { name: 'finalOpts', args: { finalOpts: { model: 'claude-fable-5-2', effort: 'high' } }, first: [SP + 'synth-fable', 'claude-fable-5-2'], retry: [SP + 'synth-opus', 'claude-opus-5-5'], retryLabel: 'synth→opus-retry' },
   ]
   const runSynth = async (extra, nulls) => {
     const calls = []
