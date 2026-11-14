@@ -5,9 +5,14 @@
 # trafilatura здесь НЕ используется — SIGSEGV в fan-out субагентов (trafilatura#925).
 set -uo pipefail
 url="${1:?usage: pdf-fetch.sh <url> [--md]}"; fmt="${2:-}"
+# Нет экстрактора (Linux без poppler-utils) → честная ошибка, а не «PDF_EMPTY: скан/paywall».
+if ! command -v pdftotext >/dev/null && ! { [ "$fmt" = "--md" ] && command -v markitdown >/dev/null; }; then
+  echo "PDF_TOOL_MISSING: pdftotext not found (macOS: brew install poppler; Debian: apt install poppler-utils)" >&2; exit 3
+fi
 cache="$HOME/.cache/pdf-fetch"; mkdir -p "$cache"
 ttl_days="${PDF_FETCH_TTL_DAYS:-30}"; lock_sec="${PDF_FETCH_LOCK_SEC:-60}"
-key="$(printf '%s' "$url" | shasum -a 256 | cut -c1-16)"
+sha256() { if command -v shasum >/dev/null; then shasum -a 256; else sha256sum; fi; }
+key="$(printf '%s' "$url" | sha256 | cut -c1-16)"
 ext=txt; [ "$fmt" = "--md" ] && ext=md
 pdf="$cache/$key.pdf"; out="$cache/$key.$ext"; lock="$cache/$key.lock.d"
 # Портативный лок (нет flock): ждём ≤ lock_sec; протухший лок (> 10 мин) снимаем; по таймауту идём без лока.
@@ -26,7 +31,12 @@ tmp="$(mktemp "$cache/$key.XXXXXX")"
 curl -fsSL --max-time 90 -A 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' "$url" -o "$tmp" || true
 via=curl
 if ! ispdf "$tmp"; then                                                         # JS-gated публичный PDF (НЕ paywall)
-  ch="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  ch="${PDF_FETCH_CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+  if [ ! -x "$ch" ]; then                                                       # Linux: Chrome/Chromium из PATH
+    for c in google-chrome google-chrome-stable chromium chromium-browser; do
+      command -v "$c" >/dev/null && { ch="$(command -v "$c")"; break; }
+    done
+  fi
   [ -x "$ch" ] && "$ch" --headless=new --disable-gpu --no-pdf-header-footer \
      --print-to-pdf="$tmp" --virtual-time-budget=8000 "$url" >/dev/null 2>&1 || true
   via=chrome
