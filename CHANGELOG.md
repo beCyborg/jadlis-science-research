@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+## [2.4.1] — 2026-11-15 — чтение PDF на Linux / PDF reading on Linux
+
+### Для человека
+- Чтение PDF на сервере (Linux) больше не врёт. Если на машине нет программы pdftotext, скрипт сразу пишет «нет программы для PDF» и как её поставить. Раньше он отвечал «скан или платный доступ», хотя документ был открытый. Ещё скрипт находит Chrome и Chromium на Linux.
+
+### For agents
+- Fixed: `scripts/pdf-fetch.sh` exits 3 with `PDF_TOOL_MISSING` on stderr when neither `pdftotext` (nor `markitdown` for `--md`) is on PATH, instead of a misleading `PDF_EMPTY`; uses `sha256sum` when `shasum` is absent; the JS-gated fallback looks for `google-chrome`/`chromium` on PATH (override: `PDF_FETCH_CHROME`). macOS behaviour unchanged.
+
 ## [2.4.0] — 2026-11-09 — синтез и критик из личного файла / synthesis and critic from a personal file
 
 ### Для человека
