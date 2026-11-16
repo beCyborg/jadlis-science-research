@@ -34,8 +34,11 @@ shift || true
 KEY="$(printf '%s|%s' "$cmd" "$*" | shasum -a 256 | cut -c1-16)"
 ttl() { # TTL сек по подкоманде
   case "$cmd" in search) echo 600;; thread) echo 1800;; user) echo 3600;; front) echo 300;; *) echo 0;; esac; }
+# mtime in epoch seconds: GNU stat (Linux) or BSD stat (macOS); GNU `stat -f` means file-system status.
+if stat -c %Y / >/dev/null 2>&1; then mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
+else mtime() { stat -f %m "$1" 2>/dev/null || echo 0; }; fi
 cache_fresh() { local f="$CACHE/$KEY.$1" t; t=$(ttl); [ "$t" -gt 0 ] && [ -s "$f" ] && \
-  [ $(( $(date +%s) - $(stat -f %m "$f" 2>/dev/null || echo 0) )) -lt "$t" ]; }
+  [ $(( $(date +%s) - $(mtime "$f") )) -lt "$t" ]; }
 
 jget() { curl -fsSL --max-time 60 -A "$UA" "$1"; }
 
@@ -44,14 +47,16 @@ CLEAN='def clean: (. // "") | gsub("<p>"; "\n\n") | gsub("<br\\s*/?>"; "\n") | g
   | gsub("&quot;"; "\"") | gsub("&#x27;"; "'\''") | gsub("&#x2F;"; "/") | gsub("&gt;"; ">")
   | gsub("&lt;"; "<") | gsub("&amp;"; "&") | gsub("\r"; "");'
 
-epoch() { # YYYY-MM-DD | epoch → epoch
-  case "$1" in (*[!0-9]*) date -j -f '%Y-%m-%d' "$1" '+%s' 2>/dev/null || { echo "bad date: $1" >&2; exit 1; };;
+epoch() { # YYYY-MM-DD | epoch → epoch (GNU date -d on Linux, BSD date -j -f on macOS)
+  case "$1" in (*[!0-9]*)
+    if date --version >/dev/null 2>&1; then date -d "$1" '+%s' 2>/dev/null || { echo "bad date: $1" >&2; exit 1; }
+    else date -j -f '%Y-%m-%d' "$1" '+%s' 2>/dev/null || { echo "bad date: $1" >&2; exit 1; }; fi;;
   (*) echo "$1";; esac; }
 
 canary_check() { # свежесть индекса; stderr-warning при отставании >1 ч (кэш 10 мин)
   local cf="$CACHE/_canary" now age latest
   now=$(date +%s)
-  if [ -s "$cf" ] && [ $((now - $(stat -f %m "$cf" 2>/dev/null || echo 0))) -lt 600 ]; then return 0; fi
+  if [ -s "$cf" ] && [ $((now - $(mtime "$cf"))) -lt 600 ]; then return 0; fi
   latest=$(jget "$API/search_by_date?tags=story&hitsPerPage=1" | jq -r '.hits[0].created_at_i // 0' 2>/dev/null || echo 0)
   [ "${latest:-0}" -eq 0 ] && return 1
   age=$((now - latest))

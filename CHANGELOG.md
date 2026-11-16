@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+## [2.5.2] — 2026-11-16 — HN на Linux / HN on Linux
+
+### Для человека
+- Поиск по Hacker News снова работает на сервере (Linux). Раньше скрипт падал с ошибкой `File: unbound variable`, поэтому канал HN в ресерче на сервере молчал. На MacBook всё работает как раньше.
+
+### For agents
+- Fixed (shared copy, same file as jadlis-search 2.6.4): `scripts/hn-fetch.sh` reads file mtime through a `mtime()` helper — GNU `stat -c %Y` on Linux, BSD `stat -f %m` on macOS (GNU `stat -f` prints file-system status, which broke the cache and canary age arithmetic under `set -u`: `line 54: File: unbound variable`); `--since`/`--until` dates parse with GNU `date -d` on Linux (midnight, local time) and BSD `date -j -f` on macOS (unchanged). Checked on macOS 27 and Debian 13 (jadlis-vps): search miss/hit, thread miss/hit, canary, `--since`.
+
 ## [2.5.1] — 2026-11-16 — умолчание папки не перебивает настройку / the folder default no longer overrides the setting
 
 ### Для человека
