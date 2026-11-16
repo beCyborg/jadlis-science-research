@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+## [2.5.1] — 2026-11-16 — умолчание папки не перебивает настройку / the folder default no longer overrides the setting
+
+### Для человека
+- Если ты задал свою папку ресерчей (или свой vault), скилл больше не может по ошибке взять папку по умолчанию. Раньше подсказка в тексте скилла после подстановки настройки читалась как «твоё значение — это заглушка, бери умолчание».
+
+### For agents
+- Fixed: the fallback notes for `VAULT_PATH` and `RESEARCH_DIR` no longer embed the `${user_config.…}` token. Claude Code substituted it too, so the note read «if the value is literally <your value>, use the default». The test is now «empty or still contains the word `user_config`». Checked headless: an unset option stays a literal `${user_config.RESEARCH_DIR}` (the manifest default is not substituted), so the fallback is what applies until the option is saved.
+
 ## [2.5.0] — 2026-11-16 — папка ресерчей настраивается / configurable research folder
 
 ### Для человека

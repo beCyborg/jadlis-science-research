@@ -39,8 +39,8 @@ Phase A (INTAKE: S2 recon + decision-first интервью + опц. персо
 
 ```
 PLUGIN_ROOT        = ${CLAUDE_PLUGIN_ROOT}
-VAULT_PATH         = ${user_config.VAULT_PATH}   (пусто или остался литерал ${user_config.VAULT_PATH} — бери ~/Jadlis)
-RESEARCH_DIR       = ${user_config.RESEARCH_DIR}   (папка отчётов от корня vault; пусто или остался литерал ${user_config.RESEARCH_DIR} — бери Знания/Ресерчи; крайние / срежь)
+VAULT_PATH         = ${user_config.VAULT_PATH}   (пусто или в значении осталось слово user_config — не подставилось — бери ~/Jadlis)
+RESEARCH_DIR       = ${user_config.RESEARCH_DIR}   (папка отчётов от корня vault; пусто или в значении осталось слово user_config — не подставилось — бери Знания/Ресерчи; крайние / срежь)
 VAULT_RESEARCH_DIR = {VAULT_PATH}/{RESEARCH_DIR}
 SKILL_DIR          = {PLUGIN_ROOT}/skills/science-research
 DATE               = !`date +%Y-%m-%d`   (значение уже подставлено при загрузке скилла)
@@ -97,7 +97,7 @@ DATE               = !`date +%Y-%m-%d`   (значение уже подстав
 
 6. **Сборка `args` + подготовка.** Вычисли `SESSION_ID = ${CLAUDE_SESSION_ID}`;
    `QUERY_SLUG` (транслит латиницей, ≤40, lowercase, дефисы); `QUERY_RU` (краткая русская
-   формулировка ≤25 симв); `VAULT_PATH` (пусто или литерал `${user_config.VAULT_PATH}` — `~/Jadlis`);
+   формулировка ≤25 симв); `VAULT_PATH` (пусто или в значении слово `user_config` — `~/Jadlis`);
    `WORK_DIR = {VAULT_PATH}/.search-paper/{SESSION_ID}_{QUERY_SLUG}` — **всегда АБСОЛЮТНЫЙ путь**
    (относительный резолвится от cwd на момент спавна агентов: `cd` главной сессии перед
    resume «терял» файлы при status ok; это касается и `resumeFromRunId`-вызовов —
