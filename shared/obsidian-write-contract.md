@@ -1,6 +1,6 @@
 # Obsidian Write Contract
 
-Общий контракт для всех skills, записывающих файлы в Obsidian vault (`Знания/Ресерчи/`, `Периоды/`).
+Общий контракт для всех skills, записывающих файлы в Obsidian vault (папка ресерчей — `RESEARCH_DIR`, по умолчанию `Знания/Ресерчи/`; дневная заметка — путь из `obsidian daily:path`).
 
 ---
 
@@ -77,7 +77,7 @@ Embed конкретной секции (`![[Файл#Секция]]`) — то�
 
 ```bash
 # 1. Прокинуть в дневную заметку (если Obsidian запущен); путь — из core Daily notes
-DAILY=$(obsidian daily:path 2>/dev/null) || DAILY="Периоды/День/$(date +%F).md"
+DAILY=$(obsidian daily:path 2>/dev/null); case "$DAILY" in *.md) ;; *) DAILY="Периоды/День/$(date +%F).md" ;; esac
 obsidian append path="$DAILY" content="- [[{NOTE_NAME}]] — {DRAFT_TYPE}, ожидает ревью" 2>/dev/null || true
 # в начало тела (после frontmatter) — obsidian prepend path="$DAILY" content="..." 
 

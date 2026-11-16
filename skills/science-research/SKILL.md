@@ -40,7 +40,8 @@ Phase A (INTAKE: S2 recon + decision-first интервью + опц. персо
 ```
 PLUGIN_ROOT        = ${CLAUDE_PLUGIN_ROOT}
 VAULT_PATH         = ${user_config.VAULT_PATH}   (пусто или остался литерал ${user_config.VAULT_PATH} — бери ~/Jadlis)
-VAULT_RESEARCH_DIR = {VAULT_PATH}/Знания/Ресерчи
+RESEARCH_DIR       = ${user_config.RESEARCH_DIR}   (папка отчётов от корня vault; пусто или остался литерал ${user_config.RESEARCH_DIR} — бери Знания/Ресерчи; крайние / срежь)
+VAULT_RESEARCH_DIR = {VAULT_PATH}/{RESEARCH_DIR}
 SKILL_DIR          = {PLUGIN_ROOT}/skills/science-research
 DATE               = !`date +%Y-%m-%d`   (значение уже подставлено при загрузке скилла)
 ```
@@ -81,7 +82,9 @@ DATE               = !`date +%Y-%m-%d`   (значение уже подстав
 5. **Опц. персонализация (Q4).** Отдельным AskUserQuestion: «Персонализировать вывод под твой
    профиль здоровья?» (да/нет). Vault читается **ТОЛЬКО при "да"**, точечно, и **только главной
    сессией** (не субагентами — изоляция приватных данных):
-   - Найди в vault заметки о здоровье: `Glob` по `{VAULT_PATH}/Потребности/**/*доров*/**/*.md`.
+   - Найди в vault заметки о здоровье: `Glob` по `{VAULT_PATH}/**/*доров*/**/*.md` (весь vault —
+     папка здоровья может лежать где угодно; результаты из папок с точкой в начале имени —
+     `.obsidian`, `.search-paper`, `.full-research`, `.trash` — отбрось).
      Ничего не нашлось — скажи об этом и продолжай с `personalize=false`.
    - Из найденного бери: TL;DR-callout медкарты (`> [!abstract]`, первые ~40 строк),
      активные находки (frontmatter `status: active` → title + severity), метрики
@@ -200,7 +203,7 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
 
 3. **Pre-write dedup (obsidian).** Через Bash (если Obsidian открыт; иначе CLI-шаги пропусти):
    ```bash
-   obsidian search query="{ключевые слова QUERY_RU}" path="Знания/Ресерчи" limit=5 format=json 2>/dev/null || echo "CLI_UNAVAILABLE"
+   obsidian search query="{ключевые слова QUERY_RU}" path="{RESEARCH_DIR}" limit=5 format=json 2>/dev/null || echo "CLI_UNAVAILABLE"
    obsidian search query="{ключевое слово}" limit=10 format=json 2>/dev/null || echo "CLI_UNAVAILABLE"
    ```
    Очень близкий дубликат → supersede (frontmatter `supersedes:` + `> [!info] Обновляет [[…]]`).
@@ -216,7 +219,8 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
 6. **Post-write (daily note).** Если Obsidian открыт:
    ```bash
    NOTE_NAME=$(basename "{REPORT_PATH}" .md)
-   obsidian append path="Периоды/День/$(date +%F).md" content="- [[${NOTE_NAME}]] — научный ресерч, ожидает ревью" 2>/dev/null || true
+   DAILY=$(obsidian daily:path 2>/dev/null); case "$DAILY" in *.md) ;; *) DAILY="Периоды/День/$(date +%F).md" ;; esac
+   obsidian append path="$DAILY" content="- [[${NOTE_NAME}]] — научный ресерч, ожидает ревью" 2>/dev/null || true
    obsidian backlinks file="${NOTE_NAME}" counts 2>/dev/null || true
    ```
 
@@ -240,7 +244,7 @@ reportPath, queryRu, relatedCandidates, retractedExcluded, enrich, capStats, aiM
    - **Модель синтеза:** `aiModelActual` — та, что сработала (Opus 5.5 xhigh по умолчанию, high на
      повторе; модель из `finalOpts`, например `claude-fable-5-2`, когда шаг 6 нашёл личный файл — с 2.4.0).
    - **Персонализация:** если включена — какие выводы помечены «под твой профиль…».
-   - Путь к отчёту `REPORT_PATH` (vault `Знания/Ресерчи`) + `{WORK_DIR}/` (полный процесс:
+   - Путь к отчёту `REPORT_PATH` (vault `{RESEARCH_DIR}`) + `{WORK_DIR}/` (полный процесс:
      per-source, enrich, adversarial.md).
    - **Последняя строка «От тебя:» — только если в отчёт попало непроверенное.** Условие: в
      Evidence Table финального отчёта есть строки с пометкой «не верифицировано» (статьи из

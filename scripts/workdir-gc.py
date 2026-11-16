@@ -3,8 +3,8 @@
 
 Scans <root>/.full-research/* and <root>/.search-paper/* (first-level dirs only)
 and classifies each work dir as KEEP or DELETE based on:
-  * whether a vault note under <root>/Знания/ references it via a
-    `work_dir:` frontmatter key (matched by directory basename),
+  * whether a vault note anywhere under <root> (dot folders skipped) references
+    it via a `work_dir:` frontmatter key (matched by directory basename),
   * its age (max of dir mtime and newest top-level file mtime),
   * protection rules (--protect, mtime < 24h, presence of a `.keep` file).
 
@@ -22,7 +22,6 @@ import sys
 import time
 
 SCAN_SUBDIRS = (".full-research", ".search-paper")
-NOTES_SUBDIR = "Знания"
 FRONTMATTER_SCAN_LINES = 60
 PROTECT_MARKER = ".keep"
 FRESH_SECONDS = 24 * 3600
@@ -43,15 +42,17 @@ def scan_references(notes_root: str) -> dict[str, list[str]]:
     """Map work dir basename -> list of note paths referencing it.
 
     One pass over every .md file under notes_root; only the first
-    FRONTMATTER_SCAN_LINES lines of each file are inspected. Symlinks skipped.
+    FRONTMATTER_SCAN_LINES lines of each file are inspected. Symlinks and
+    dot folders (.obsidian, .trash, .full-research, .search-paper, ...) skipped.
     """
     refs: dict[str, list[str]] = {}
     if not os.path.isdir(notes_root):
         return refs
 
     for dirpath, dirnames, filenames in os.walk(notes_root, followlinks=False):
-        # do not descend into symlinked directories
-        dirnames[:] = [d for d in dirnames if not os.path.islink(os.path.join(dirpath, d))]
+        # do not descend into symlinked or dot directories
+        dirnames[:] = [d for d in dirnames
+                       if not d.startswith(".") and not os.path.islink(os.path.join(dirpath, d))]
         for name in filenames:
             if not name.endswith(".md"):
                 continue
@@ -127,7 +128,7 @@ def human_size(num_bytes: int) -> str:
 
 def collect(root: str, protect: set[str], keep_days: int, orphan_days: int) -> list[dict]:
     now = time.time()
-    refs = scan_references(os.path.join(root, NOTES_SUBDIR))
+    refs = scan_references(root)
     entries: list[dict] = []
 
     for sub in SCAN_SUBDIRS:

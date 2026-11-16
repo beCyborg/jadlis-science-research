@@ -122,7 +122,7 @@ PubMed, Semantic Scholar, OpenAlex, CORE and contact emails for Crossref and Unp
 once with `/jadlis-search:keys`, and the values go into the macOS Keychain. Without them some databases
 drop to anonymous limits and answer intermittently. I do not retell other people's pricing: those
 bills are theirs. The notes folder is set at install time (`VAULT_PATH`, `~/Jadlis` by default) —
-the report lands in `Знания/Ресерчи`. With Obsidian closed, dedup and link insertion are skipped
+the report lands in the `RESEARCH_DIR` folder inside it (`Знания/Ресерчи` by default). With Obsidian closed, dedup and link insertion are skipped
 and the file is still written.
 
 Keys live in the macOS Keychain; on Linux the same `security`-based helper does not exist, so

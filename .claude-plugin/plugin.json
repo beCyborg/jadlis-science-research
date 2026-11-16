@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "jadlis-science-research",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "displayName": "Jadlis — научный ресерч",
   "description": "PubMed, Europe PMC, Semantic Scholar, OpenAlex, arXiv, Cochrane; снежный ком по цитированиям, проверка отзыва статьи, GRADE-синтез → заметка в vault. Требует плагин jadlis-search (ключи Brave и Firecrawl).",
   "author": {
@@ -27,8 +27,15 @@
     "VAULT_PATH": {
       "type": "directory",
       "title": "Папка vault",
-      "description": "Корень Obsidian-vault системы Jadlis. Туда лягут отчёты (Знания/Ресерчи/) и вердикты (AI/verif/).",
+      "description": "Корень Obsidian-vault системы Jadlis. Туда лягут отчёты (в папку из RESEARCH_DIR) и вердикты (AI/verif/).",
       "default": "~/Jadlis",
+      "required": false
+    },
+    "RESEARCH_DIR": {
+      "type": "string",
+      "title": "Папка ресерчей",
+      "description": "Папка для отчётов внутри vault, путь от корня vault",
+      "default": "Знания/Ресерчи",
       "required": false
     }
   }

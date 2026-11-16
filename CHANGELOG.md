@@ -5,6 +5,19 @@
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-11-16 — папка ресерчей настраивается / configurable research folder
+
+### Для человека
+- Папку для отчётов теперь можно выбрать. Это настройка `RESEARCH_DIR` («Папка ресерчей»), путь от корня vault. Если ты её не трогаешь, отчёты ложатся туда же, куда раньше, — в `Знания/Ресерчи`.
+- Ссылку на отчёт плагин пишет в дневную заметку по пути из настроек Obsidian (core Daily notes). Если ты перенёс папку дневных заметок, ссылка попадёт в новую папку.
+- Персонализация под профиль здоровья ищет папку здоровья во всём vault, а не только в `Потребности/`.
+
+### For agents
+- Added: `userConfig.RESEARCH_DIR` (string, default `Знания/Ресерчи`, optional) — reports folder relative to `VAULT_PATH`. The skill computes `RESEARCH_DIR` (empty or literal `${user_config.RESEARCH_DIR}` → `Знания/Ресерчи`) and `VAULT_RESEARCH_DIR = {VAULT_PATH}/{RESEARCH_DIR}`; `obsidian search path=` and the summary use it.
+- Changed: the daily-note link goes to `obsidian daily:path`; the old `Периоды/День/<date>.md` is used only when that command fails or prints no `.md` path (skill + `shared/obsidian-write-contract.md`).
+- Changed: `scripts/workdir-gc.py` scans every `.md` under `--root` (dot folders skipped) for `work_dir:` references instead of `<root>/Знания/` only.
+- Changed: health lookup glob is `{VAULT_PATH}/**/*доров*/**/*.md` (dot folders dropped) instead of `{VAULT_PATH}/Потребности/**`.
+
 ## [2.4.1] — 2026-11-15 — чтение PDF на Linux / PDF reading on Linux
 
 ### Для человека
